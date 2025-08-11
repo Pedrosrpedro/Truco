@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truco Online</title>
+    <!-- O script do socket.io será servido automaticamente pelo nosso servidor -->
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #0d47a1; color: white; text-align: center; padding-top: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .placar { display: flex; justify-content: space-around; font-size: 24px; margin-bottom: 20px; }
+        .mesa { background-color: #00695c; border: 5px solid #004d40; border-radius: 10px; padding: 20px; margin: 20px 0; min-height: 250px; display: flex; justify-content: space-around; align-items: center; }
+        .area-cartas { display: flex; gap: 10px; }
+        .carta { width: 80px; height: 120px; background-color: white; border: 1px solid black; border-radius: 5px; position: relative; color: black; font-size: 24px; font-weight: bold; }
+        .carta-jogador { cursor: pointer; transition: transform 0.2s; }
+        .carta-jogador:hover { transform: translateY(-10px); }
+        .carta .valor { position: absolute; top: 5px; left: 5px; }
+        .carta .naipe { font-size: 40px; position: absolute; bottom: 5px; right: 5px; }
+        .carta.manilha { border: 3px solid gold; }
+        .carta-placeholder { width: 80px; height: 120px; background-color: rgba(0,0,0,0.2); border: 2px dashed #FFF; border-radius: 5px; }
+        .carta-virada-oponente { width: 80px; height: 120px; background-color: #B71C1C; border-radius: 5px; }
+        .botoes button, .login-area button, .login-area input { padding: 10px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin: 5px; }
+        .botoes button { background-color: #ffc107; color: black; }
+        #game-area { display: none; } /* Escondido por padrão */
+        #login-area { background-color: #004d40; padding: 20px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Truco Online</h1>
+
+        <div id="login-area">
+            <h3>Bem-vindo!</h3>
+            <button id="btn-criar">Criar Nova Sala</button>
+            <hr>
+            <input type="text" id="input-sala" placeholder="Cole o código da sala aqui">
+            <button id="btn-entrar">Entrar na Sala</button>
+            <div id="room-code-display"></div>
+        </div>
+
+        <div id="game-area">
+            <div class="placar">
+                <div>Você: <span id="placar-nos">0</span></div>
+                <div>Oponente: <span id="placar-eles">0</span></div>
+            </div>
+
+            <div class="mesa">
+                <div id="area-oponente" class="area-cartas"></div>
+                <div id="area-vira"></div>
+                <div id="area-mesa" class="area-cartas">
+                    <div id="mesa-oponente" class="carta-placeholder"></div>
+                    <div id="mesa-jogador" class="carta-placeholder"></div>
+                </div>
+            </div>
+
+            <div id="area-jogador" class="area-cartas"></div>
+            
+            <div class="botoes">
+                <button id="btn-truco">TRUCO!</button>
+            </div>
+            <div id="mensagem" style="margin-top: 15px; font-size: 1.2em; min-height: 25px;"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // Elementos da UI
+        const loginArea = document.getElementById('login-area');
+        const gameArea = document.getElementById('game-area');
+        const btnCriar = document.getElementById('btn-criar');
+        const btnEntrar = document.getElementById('btn-entrar');
+        const inputSala = document.getElementById('input-sala');
+        const roomCodeDisplay = document.getElementById('room-code-display');
+        const mensagemEl = document.getElementById('mensagem');
+        const areaJogadorEl = document.getElementById('area-jogador');
+        const areaOponenteEl = document.getElementById('area-oponente');
+        const areaViraEl = document.getElementById('area-vira');
+        const mesaJogadorEl = document.getElementById('mesa-jogador');
+        const mesaOponenteEl = document.getElementById('mesa-oponente');
+        const btnTruco = document.getElementById('btn-truco');
+
+        let meuId = '';
+        let roomId = '';
+        let minhaMao = [];
+        let manilhaValor = '';
+
+        // --- Lógica de Conexão ---
+        btnCriar.addEventListener('click', () => {
+            socket.emit('criarSala');
+        });
+
+        btnEntrar.addEventListener('click', () => {
+            const code = inputSala.value.trim();
+            if (code) {
+                socket.emit('entrarNaSala', code);
+            }
+        });
+        
+        btnTruco.addEventListener('click', () => {
+            socket.emit('pedirTruco', roomId);
+        });
+
+        // --- Ouvindo Eventos do Servidor ---
+        socket.on('connect', () => {
+            meuId = socket.id;
+        });
+        
+        socket.on('salaCriada', (newRoomId) => {
+            roomId = newRoomId;
+            loginArea.innerHTML = `<h3>Sala Criada!</h3><p>Envie este código para seu amigo:</p><strong style="font-size: 1.5em; background: #FFF; color: #000; padding: 5px 10px; border-radius: 5px;">${roomId}</strong><p>Aguardando oponente...</p>`;
+        });
+
+        socket.on('partidaIniciada', () => {
+            loginArea.style.display = 'none';
+            gameArea.style.display = 'block';
+        });
+
+        socket.on('maoRecebida', ({ mao, gameState }) => {
+            minhaMao = mao;
+            manilhaValor = gameState.manilha;
+            desenharMao(mao, gameState.manilha);
+            desenharVira(gameState.vira, gameState.manilha);
+            desenharMaoOponente(mao.length);
+            mensagemEl.textContent = gameState.turno === meuId ? 'Sua vez de jogar!' : 'Vez do oponente.';
+        });
+        
+        socket.on('cartaJogada', ({ jogadorId, carta }) => {
+            const cartaEl = criarElementoCarta(carta, manilhaValor);
+            if (jogadorId === meuId) {
+                mesaJogadorEl.innerHTML = '';
+                mesaJogadorEl.appendChild(cartaEl);
+            } else {
+                mesaOponenteEl.innerHTML = '';
+                mesaOponenteEl.appendChild(cartaEl);
+            }
+        });
+
+        socket.on('trucoRecebido', ({ message }) => {
+            // Lógica para o jogador decidir se aceita, corre ou pede 6.
+            // Por simplicidade, apenas mostra a mensagem.
+            alert(message);
+        });
+
+        socket.on('erro', (msg) => {
+            alert(`Erro: ${msg}`);
+        });
+        
+        socket.on('oponenteDesconectou', () => {
+            alert('Seu oponente desconectou. O jogo acabou.');
+            gameArea.style.display = 'none';
+            loginArea.style.display = 'block';
+            loginArea.innerHTML = '<h3>Seu oponente saiu.</h3><p>Você pode criar ou entrar em outra sala.</p>';
+        });
+
+        // --- Funções de Desenho ---
+        function criarElementoCarta(carta, manilha, isJogador = false) {
+            const cartaEl = document.createElement('div');
+            cartaEl.classList.add('carta');
+            if (isJogador) cartaEl.classList.add('carta-jogador');
+            if (carta.valor === manilha) cartaEl.classList.add('manilha');
+
+            cartaEl.innerHTML = `<div class="valor">${carta.valor}</div><div class="naipe">${carta.naipe}</div>`;
+            
+            if (isJogador) {
+                cartaEl.addEventListener('click', () => {
+                    // Remove a carta da mão localmente para resposta visual rápida
+                    const index = minhaMao.findIndex(c => c.valor === carta.valor && c.naipe === carta.naipe);
+                    if (index > -1) {
+                        minhaMao.splice(index, 1);
+                        desenharMao(minhaMao, manilha); // Redesenha a mão sem a carta jogada
+                    }
+                    // Envia a jogada para o servidor
+                    socket.emit('jogarCarta', { roomId, carta });
+                });
+            }
+            return cartaEl;
+        }
+
+        function desenharMao(mao, manilha) {
+            areaJogadorEl.innerHTML = '';
+            mao.forEach(carta => {
+                areaJogadorEl.appendChild(criarElementoCarta(carta, manilha, true));
+            });
+        }
+        
+        function desenharVira(vira, manilha) {
+            areaViraEl.innerHTML = '';
+            const viraEl = criarElementoCarta(vira, manilha);
+            viraEl.style.marginTop = '20px';
+            areaViraEl.appendChild(viraEl);
+        }
+        
+        function desenharMaoOponente(numCartas) {
+            areaOponenteEl.innerHTML = '';
+            for(let i=0; i<numCartas; i++) {
+                const cartaVirada = document.createElement('div');
+                cartaVirada.classList.add('carta-virada-oponente');
+                areaOponenteEl.appendChild(cartaVirada);
+            }
+        }
+    </script>
+</body>
+</html>
