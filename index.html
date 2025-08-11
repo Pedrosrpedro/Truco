@@ -1,489 +1,74 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Truco P2P & IA (Corrigido)</title>
-    <!-- 1. Importando a biblioteca PeerJS de um CDN -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peer.min.js"></script>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d47a1; color: white; text-align: center; padding: 15px; padding-bottom: 150px; /* Espaço para o console */ }
-        .container { max-width: 900px; margin: 0 auto; background-color: #002171; padding: 20px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
-        h1 { color: #bbdefb; }
-        .placar { display: flex; justify-content: space-around; font-size: 28px; margin-bottom: 20px; font-weight: bold; }
-        .mesa { background-color: #00695c; border: 5px solid #004d40; border-radius: 10px; padding: 20px; margin: 20px 0; min-height: 270px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; gap: 20px; }
-        .area-cartas { display: flex; gap: 10px; justify-content: center; align-items: center; min-height: 130px; }
-        .carta { width: 80px; height: 120px; background-color: white; border: 2px solid black; border-radius: 8px; position: relative; color: black; font-size: 24px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; box-shadow: 3px 3px 5px rgba(0,0,0,0.3); }
-        .carta-jogador { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
-        .carta-jogador:hover { transform: translateY(-15px); box-shadow: 0 10px 15px rgba(0,0,0,0.4); }
-        .carta.manilha { border: 4px solid gold; box-shadow: 0 0 10px gold; }
-        .carta .valor { align-self: flex-start; }
-        .carta .naipe { font-size: 40px; align-self: flex-end; }
-        .carta-placeholder { width: 80px; height: 120px; background-color: rgba(0,0,0,0.2); border: 2px dashed #FFF; border-radius: 5px; display: flex; justify-content: center; align-items: center; font-size: 14px; }
-        .carta-virada-oponente { width: 80px; height: 120px; background: linear-gradient(45deg, #B71C1C, #f44336); border: 2px solid #6a0000; border-radius: 8px; box-shadow: 3px 3px 5px rgba(0,0,0,0.3); }
-        .botoes-acao button, .area-setup button, .area-setup select, .area-setup input { padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin: 5px; background-color: #fbc02d; color: #000; font-weight: bold; transition: background-color 0.2s; }
-        .botoes-acao button:hover, .area-setup button:hover { background-color: #fdd835; }
-        .botoes-acao button:disabled { background-color: #9e9e9e; cursor: not-allowed; }
-        #game-screen, #p2p-setup, #ia-setup { display: none; }
-        .area-setup { background-color: #004d40; padding: 25px; border-radius: 10px; margin-bottom: 20px; }
-        #meu-id-display { font-size: 1.2em; background: #FFF; color: #000; padding: 5px 10px; border-radius: 5px; user-select: all; cursor: pointer; display: inline-block; margin-top: 10px; min-height: 20px;}
-        #status, #mensagem { min-height: 25px; margin-top: 15px; font-size: 1.2em; font-weight: bold; color: #ffeb3b; }
-        #rodada-info { font-size: 1.1em; color: #e1f5fe; }
-        /* ESTILOS PARA O MINI-CONSOLE */
-        #mini-console-container { position: fixed; bottom: 0; left: 0; width: 100%; background-color: #001f3f; border-top: 2px solid #fdd835; padding: 10px; box-sizing: border-box; text-align: left; }
-        #mini-console { height: 100px; overflow-y: auto; background-color: #000; padding: 5px; border-radius: 5px; font-family: monospace; font-size: 12px; }
-        .log-info { color: #FFFFFF; }
-        .log-success { color: #2E7D32; font-weight: bold; }
-        .log-error { color: #C62828; font-weight: bold; }
-        .log-data { color: #0277BD; }
-    </style>
+    <title>Jogo de Truco</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>Truco P2P & IA (Corrigido)</h1>
-
-        <div id="mode-selection" class="area-setup">
-            <h2>Escolha o Modo de Jogo</h2>
-            <button id="btn-mode-p2p">Online (P2P)</button>
-            <button id="btn-mode-ia">Contra IA</button>
+    <div id="game-board">
+        <div id="cpu-player-2" class="player">
+            <div class="card-placeholder"></div>
+            <div class="card-placeholder"></div>
+            <div class="card-placeholder"></div>
+            <p class="player-name">CPU 2</p>
         </div>
 
-        <div id="p2p-setup" class="area-setup">
-            <h3>Conexão P2P</h3>
-            <p>Seu código de jogo online aparecerá aqui.</p>
-            <code id="meu-id-display">Aguardando código...</code>
-            <hr style="margin: 20px 0;">
-            <input type="text" id="input-oponente-id" placeholder="Cole o código do seu amigo aqui">
-            <button id="btn-entrar">Entrar no Jogo</button>
-        </div>
-
-        <div id="ia-setup" class="area-setup">
-            <h3>Jogar contra a IA</h3>
-            <label for="dificuldade-ia">Escolha a dificuldade:</label>
-            <select id="dificuldade-ia">
-                <option value="facil">Fácil</option>
-                <option value="medio">Médio</option>
-                <option value="dificil">Difícil</option>
-            </select>
-            <button id="btn-start-ia">Iniciar Jogo contra IA</button>
-        </div>
-
-        <div id="game-screen">
-            <div class="placar">
-                <div id="placar-jogador-label">Você: <span id="placar-nos">0</span></div>
-                <div id="placar-oponente-label">Oponente: <span id="placar-eles">0</span></div>
+        <div id="middle-area">
+            <div id="cpu-player-1" class="player">
+                <div class="card-placeholder"></div>
+                <div class="card-placeholder"></div>
+                <div class="card-placeholder"></div>
+                <p class="player-name">CPU 1</p>
             </div>
-            <div id="rodada-info"></div>
-            
-            <div class="mesa">
-                <div id="area-oponente" class="area-cartas"></div>
-                <div class="area-cartas">
-                    <div id="mesa-oponente" class="carta-placeholder">Oponente</div>
-                    <div id="area-vira" class="carta-placeholder">Vira</div>
-                    <div id="mesa-jogador" class="carta-placeholder">Você</div>
+
+            <div id="table">
+                <div id="vira-container">
+                    <p>Vira</p>
+                    <div id="vira" class="card"></div>
+                </div>
+                <div id="played-cards">
+                    <!-- Cartas jogadas aparecerão aqui -->
                 </div>
             </div>
 
-            <div id="area-jogador" class="area-cartas"></div>
-            
-            <div id="botoes-acao" class="botoes-acao"></div>
-            <div id="mensagem"></div>
+            <div id="cpu-player-3" class="player">
+                <div class="card-placeholder"></div>
+                <div class="card-placeholder"></div>
+                <div class="card-placeholder"></div>
+                <p class="player-name">CPU 3</p>
+            </div>
+        </div>
+
+        <div id="human-player" class="player">
+            <p class="player-name">Você</p>
+            <div id="player-hand">
+                <!-- Suas cartas aparecerão aqui -->
+            </div>
         </div>
     </div>
 
-    <!-- MINI-CONSOLE PARA LOGS -->
-    <div id="mini-console-container">
-        <h4 style="margin: 0 0 5px 0;">Log de Eventos:</h4>
-        <div id="mini-console"></div>
+    <div id="game-controls">
+        <div id="scoreboard">
+            <p>Nós: <span id="player-score">0</span></p>
+            <p>Eles: <span id="cpu-score">0</span></p>
+        </div>
+        <div id="action-buttons">
+            <button id="truco-button">Truco</button>
+            <button id="run-button">Correr</button>
+        </div>
+        <div id="difficulty-selector">
+            <label for="difficulty">Dificuldade:</label>
+            <select id="difficulty">
+                <option value="easy">Fácil</option>
+                <option value="medium">Médio</option>
+                <option value="hard">Difícil</option>
+            </select>
+        </div>
+        <button id="new-game-button">Novo Jogo</button>
     </div>
 
-
-    <script>
-    // ELEMENTOS DA UI
-    const modeSelection = document.getElementById('mode-selection');
-    const p2pSetup = document.getElementById('p2p-setup');
-    const iaSetup = document.getElementById('ia-setup');
-    const gameScreen = document.getElementById('game-screen');
-    const mensagemEl = document.getElementById('mensagem');
-    const consoleEl = document.getElementById('mini-console');
-    
-    // VARIÁVEIS GLOBAIS
-    let peer;
-    let conn;
-    let souHost = false;
-    let gameState = {};
-    const FORCA_CARTAS = { '4': 0, '5': 1, '6': 2, '7': 3, 'Q': 4, 'J': 5, 'K': 6, 'A': 7, '2': 8, '3': 9 };
-    const NAIPES_FORCA = { '♦': 10, '♠': 11, '♥': 12, '♣': 13 };
-
-    // --- NOVO: FUNÇÃO DE LOG NO MINI-CONSOLE ---
-    function logToScreen(message, type = 'info') {
-        const p = document.createElement('p');
-        p.textContent = `> ${message}`;
-        p.className = `log-${type}`;
-        consoleEl.appendChild(p);
-        consoleEl.scrollTop = consoleEl.scrollHeight; // Auto-scroll para a última mensagem
-    }
-
-    // --- LÓGICA DE SELEÇÃO DE MODO ---
-    document.getElementById('btn-mode-p2p').addEventListener('click', () => {
-        modeSelection.style.display = 'none';
-        p2pSetup.style.display = 'block';
-        logToScreen("Modo Online selecionado. Inicializando conexão...");
-        inicializarPeer();
-    });
-
-    document.getElementById('btn-mode-ia').addEventListener('click', () => {
-        modeSelection.style.display = 'none';
-        iaSetup.style.display = 'block';
-    });
-
-    document.getElementById('btn-start-ia').addEventListener('click', () => {
-        const dificuldade = document.getElementById('dificuldade-ia').value;
-        iaSetup.style.display = 'none';
-        gameScreen.style.display = 'block';
-        
-        gameState = criarEstadoInicial('ia');
-        gameState.iaDificuldade = dificuldade;
-        
-        document.getElementById('placar-oponente-label').textContent = `IA (${dificuldade}): `;
-        
-        iniciarNovaMao();
-    });
-
-    // --- LÓGICA DE CONEXÃO P2P (MELHORADA) ---
-    function inicializarPeer() {
-        logToScreen("Tentando conectar ao servidor de sinalização PeerJS...");
-        peer = new Peer(); // Usa o servidor padrão, mais confiável
-
-        peer.on('open', id => {
-            document.getElementById('meu-id-display').textContent = id;
-            logToScreen(`Conexão estabelecida! Seu código é: ${id}`, 'success');
-        });
-
-        peer.on('connection', newConn => {
-            logToScreen(`Oponente (${newConn.peer}) tentando se conectar...`, 'success');
-            conn = newConn;
-            souHost = true;
-            configurarConexao();
-        });
-
-        peer.on('error', err => {
-            logToScreen(`ERRO DE CONEXÃO: ${err.message}. Verifique sua internet ou tente novamente.`, 'error');
-            alert('Erro de conexão P2P: ' + err.message);
-        });
-    }
-
-    document.getElementById('btn-entrar').addEventListener('click', () => {
-        const oponenteId = document.getElementById('input-oponente-id').value.trim();
-        if (!oponenteId) {
-            alert('Insira o código do seu amigo.');
-            return;
-        }
-        logToScreen(`Tentando conectar ao Host: ${oponenteId}...`);
-        conn = peer.connect(oponenteId);
-        configurarConexao();
-    });
-    
-    function configurarConexao() {
-        conn.on('open', () => {
-            logToScreen(`Conexão com o oponente estabelecida!`, 'success');
-            p2pSetup.style.display = 'none';
-            gameScreen.style.display = 'block';
-            
-            if (souHost) {
-                gameState = criarEstadoInicial('p2p');
-                iniciarNovaMao();
-            } else {
-                mensagemEl.textContent = 'Conectado! Aguardando o Host iniciar.';
-            }
-        });
-
-        conn.on('data', (data) => {
-            logToScreen(`Dados recebidos do oponente. Tipo: ${data.type}`, 'data');
-            if (data.type === 'gameStateUpdate') {
-                gameState = data.state;
-                atualizarUI();
-            }
-        });
-
-        conn.on('close', () => {
-            logToScreen('Oponente desconectou.', 'error');
-            alert('Oponente desconectou. O jogo será recarregado.');
-            location.reload();
-        });
-    }
-
-    function enviarEstadoJogo() {
-        if (gameState.gameMode === 'p2p' && conn && conn.open) {
-            logToScreen("Enviando estado do jogo para o oponente...", 'data');
-            conn.send({ type: 'gameStateUpdate', state: gameState });
-        }
-    }
-    
-    // --- LÓGICA CENTRAL DO JOGO (REFINADA) ---
-    function criarEstadoInicial(mode) {
-        return {
-            gameMode: mode,
-            placarNos: 0,
-            placarEles: 0,
-            maoNos: [],
-            maoEles: [],
-            cartasJogadasNos: [],
-            cartasJogadasEles: [],
-            vira: null,
-            manilha: null,
-            baralho: [],
-            turnoDe: 'nos',
-            vencedorUltimaMao: 'nos', 
-            rodadaAtual: 1,
-            placarRodada: { nos: 0, eles: 0 },
-            primeiroVencedorRodada: null,
-            valorDaMao: 1,
-            quemPediuTruco: null,
-            estadoTruco: null,
-        };
-    }
-    
-    function criarBaralho() {
-        const naipes = ['♦', '♠', '♥', '♣'];
-        const valores = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
-        let baralho = [];
-        for (const naipe of naipes) {
-            for (const valor of valores) {
-                baralho.push({ valor, naipe });
-            }
-        }
-        for (let i = baralho.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [baralho[i], baralho[j]] = [baralho[j], baralho[i]];
-        }
-        return baralho;
-    }
-
-    function iniciarNovaMao() {
-        if (gameState.gameMode === 'p2p' && !souHost) return;
-
-        gameState.baralho = criarBaralho();
-        gameState.vira = gameState.baralho.pop();
-        const viraIndex = Object.keys(FORCA_CARTAS).indexOf(gameState.vira.valor);
-        const valoresOrdenados = Object.keys(FORCA_CARTAS);
-        gameState.manilha = viraIndex === valoresOrdenados.length - 1 ? valoresOrdenados[0] : valoresOrdenados[viraIndex + 1];
-        
-        gameState.maoNos = gameState.baralho.splice(0, 3);
-        gameState.maoEles = gameState.baralho.splice(0, 3);
-        
-        gameState.cartasJogadasNos = [];
-        gameState.cartasJogadasEles = [];
-        gameState.rodadaAtual = 1;
-        gameState.placarRodada = { nos: 0, eles: 0 };
-        gameState.primeiroVencedorRodada = null;
-        gameState.valorDaMao = (gameState.placarNos === 11 || gameState.placarEles === 11) ? 3 : 1;
-        gameState.quemPediuTruco = null;
-        gameState.estadoTruco = null;
-        
-        // CORREÇÃO: Quem perdeu a mão anterior começa a próxima
-        gameState.turnoDe = gameState.vencedorUltimaMao === 'nos' ? 'eles' : 'nos';
-        
-        enviarEstadoJogo();
-        atualizarUI();
-        verificarTurnoIA();
-    }
-    
-    function getForcaCarta(carta) {
-        let forca = FORCA_CARTAS[carta.valor];
-        if (carta.valor === gameState.manilha) {
-            forca = 100 + NAIPES_FORCA[carta.naipe];
-        }
-        return forca;
-    }
-
-    function jogadorJogouCarta(index) {
-        const meuID = (gameState.gameMode === 'p2p' && !souHost) ? 'eles' : 'nos';
-        if (gameState.turnoDe !== meuID || gameState.estadoTruco === 'pendente') return;
-
-        const mao = (meuID === 'nos') ? gameState.maoNos : gameState.maoEles;
-        if (!mao[index]) return;
-        const cartaJogada = mao.splice(index, 1)[0];
-        
-        if (meuID === 'nos') {
-            gameState.cartasJogadasNos.push(cartaJogada);
-        } else {
-            gameState.cartasJogadasEles.push(cartaJogada);
-        }
-
-        gameState.turnoDe = (meuID === 'nos') ? 'eles' : 'nos';
-
-        if (gameState.cartasJogadasNos.length === gameState.cartasJogadasEles.length) {
-            setTimeout(avaliarRodada, 1200);
-        } else {
-            enviarEstadoJogo();
-            atualizarUI();
-            verificarTurnoIA();
-        }
-    }
-
-    function avaliarRodada() {
-        // ... (A lógica de avaliar a rodada, finalizar a mão, truco e IA permanecem muito similares,
-        // mas as correções principais estão no fluxo de dados e na UI. O código abaixo é mantido para completude)
-        const cartaNos = gameState.cartasJogadasNos[gameState.rodadaAtual - 1];
-        const cartaEles = gameState.cartasJogadasEles[gameState.rodadaAtual - 1];
-        const forcaNos = getForcaCarta(cartaNos);
-        const forcaEles = getForcaCarta(cartaEles);
-        let vencedorRodada;
-
-        if (forcaNos > forcaEles) {
-            vencedorRodada = 'nos';
-            gameState.placarRodada.nos++;
-        } else if (forcaEles > forcaNos) {
-            vencedorRodada = 'eles';
-            gameState.placarRodada.eles++;
-        } else {
-            vencedorRodada = 'empate';
-            if (gameState.rodadaAtual > 1) { // Empate na 2a ou 3a vale ponto pra ambos
-                 gameState.placarRodada.nos++;
-                 gameState.placarRodada.eles++;
-            }
-        }
-        
-        if (gameState.rodadaAtual === 1 && vencedorRodada !== 'empate') {
-            gameState.primeiroVencedorRodada = vencedorRodada;
-        }
-
-        gameState.turnoDe = (vencedorRodada === 'empate') ? (gameState.turnoDe === 'nos' ? 'eles' : 'nos') : vencedorRodada;
-
-        let vencedorMao = null;
-        if (gameState.placarRodada.nos >= 2) vencedorMao = 'nos';
-        if (gameState.placarRodada.eles >= 2) vencedorMao = 'eles';
-        if (gameState.rodadaAtual === 2 && vencedorRodada === 'empate') vencedorMao = gameState.primeiroVencedorRodada;
-        if (gameState.rodadaAtual === 3 && !vencedorMao) {
-            vencedorMao = gameState.placarRodada.nos > gameState.placarRodada.eles ? 'nos' : (gameState.placarRodada.eles > gameState.placarRodada.nos ? 'eles' : gameState.primeiroVencedorRodada);
-        }
-
-        if (vencedorMao) {
-            finalizarMao(vencedorMao);
-        } else {
-            gameState.rodadaAtual++;
-            enviarEstadoJogo();
-            atualizarUI();
-            verificarTurnoIA();
-        }
-    }
-    
-    function finalizarMao(vencedor) {
-        gameState.vencedorUltimaMao = vencedor;
-        if (vencedor !== 'empate') {
-            gameState[vencedor === 'nos' ? 'placarNos' : 'placarEles'] += gameState.valorDaMao;
-        }
-        
-        mensagemEl.textContent = vencedor === 'empate' ? `Mão empatada!` : `Ponto para ${vencedor === 'nos' ? 'você' : 'o oponente'}!`;
-
-        if (gameState.placarNos >= 12 || gameState.placarEles >= 12) {
-            const ganhadorFinal = gameState.placarNos >= 12 ? 'Você' : 'Oponente';
-            mensagemEl.textContent = `FIM DE JOGO! ${ganhadorFinal} venceu!`;
-            // Travar tudo
-        } else {
-             setTimeout(iniciarNovaMao, 2500);
-        }
-        
-        enviarEstadoJogo();
-        atualizarUI();
-    }
-
-
-    // --- ATUALIZAÇÃO DA INTERFACE (UI) --- CORRIGIDA ---
-    function atualizarUI() {
-        if (!gameState || !gameState.gameMode) return; // Não faz nada se o jogo não começou
-
-        // Define a perspectiva do jogador. No modo IA, é sempre 'nos'.
-        // No modo P2P, se não for o host, a perspectiva é 'eles'.
-        const minhaPerspectiva = (gameState.gameMode === 'p2p' && !souHost) ? 'eles' : 'nos';
-        const oponentePerspectiva = (minhaPerspectiva === 'nos') ? 'eles' : 'nos';
-
-        // CORREÇÃO PRINCIPAL: Acessa os dados corretos do gameState com base na perspectiva
-        const meuPlacar = gameState['placar' + minhaPerspectiva.charAt(0).toUpperCase() + minhaPerspectiva.slice(1)];
-        const oponentePlacar = gameState['placar' + oponentePerspectiva.charAt(0).toUpperCase() + oponentePerspectiva.slice(1)];
-        const minhaMaoArray = gameState['mao' + minhaPerspectiva.charAt(0).toUpperCase() + minhaPerspectiva.slice(1)];
-        const oponenteMaoArray = gameState['mao' + oponentePerspectiva.charAt(0).toUpperCase() + oponentePerspectiva.slice(1)];
-        
-        const minhasCartasJogadas = gameState.cartasJogadasNos;
-        const oponenteCartasJogadas = gameState.cartasJogadasEles;
-
-        // Atualizar Placar
-        document.getElementById('placar-nos').textContent = meuPlacar;
-        document.getElementById('placar-eles').textContent = oponentePlacar;
-        
-        // Info da Rodada
-        document.getElementById('rodada-info').textContent = `Mão valendo ${gameState.valorDaMao} ponto(s).`;
-        
-        // Vira
-        document.getElementById('area-vira').innerHTML = '';
-        if (gameState.vira) {
-            document.getElementById('area-vira').appendChild(criarElementoCarta(gameState.vira, false));
-        }
-
-        // Minha Mão
-        const minhaMaoEl = document.getElementById('area-jogador');
-        minhaMaoEl.innerHTML = '';
-        if(minhaMaoArray) {
-            minhaMaoArray.forEach((carta, index) => {
-                const cartaEl = criarElementoCarta(carta, true, index);
-                minhaMaoEl.appendChild(cartaEl);
-            });
-        }
-        
-        // Mão do Oponente
-        const oponenteMaoEl = document.getElementById('area-oponente');
-        oponenteMaoEl.innerHTML = '';
-        if(oponenteMaoArray) {
-            oponenteMaoArray.forEach(() => {
-                const cartaVirada = document.createElement('div');
-                cartaVirada.classList.add('carta-virada-oponente');
-                oponenteMaoEl.appendChild(cartaVirada);
-            });
-        }
-        
-        // Cartas na Mesa (Perspectiva do Host é a referência)
-        document.getElementById('mesa-jogador').innerHTML = '<div class="carta-placeholder">Você</div>';
-        if (minhasCartasJogadas[gameState.rodadaAtual-1]) {
-             document.getElementById('mesa-jogador').innerHTML = '';
-             document.getElementById('mesa-jogador').appendChild(criarElementoCarta(minhasCartasJogadas[gameState.rodadaAtual-1], false));
-        }
-        document.getElementById('mesa-oponente').innerHTML = '<div class="carta-placeholder">Oponente</div>';
-        if (oponenteCartasJogadas[gameState.rodadaAtual-1]) {
-             document.getElementById('mesa-oponente').innerHTML = '';
-             document.getElementById('mesa-oponente').appendChild(criarElementoCarta(oponenteCartasJogadas[gameState.rodadaAtual-1], false));
-        }
-
-        // Mensagens e Turno
-        const eOMeuTurno = (gameState.turnoDe === minhaPerspectiva);
-        if (eOMeuTurno) {
-            if(gameState.estadoTruco === 'pendente'){
-                 mensagemEl.textContent = "Oponente pediu TRUCO! E agora?";
-            } else {
-                 mensagemEl.textContent = "É a sua vez de jogar!";
-            }
-        } else {
-            mensagemEl.textContent = "Aguardando oponente...";
-        }
-    }
-
-    function criarElementoCarta(carta, isJogador, index = -1) {
-        const cartaEl = document.createElement('div');
-        cartaEl.classList.add('carta');
-        if (isJogador) cartaEl.classList.add('carta-jogador');
-        if (carta.valor === gameState.manilha) cartaEl.classList.add('manilha');
-
-        cartaEl.innerHTML = `<div class="valor">${carta.valor}</div><div class="naipe">${carta.naipe}</div>`;
-        if (isJogador) {
-            // A função jogadorJogouCarta já sabe a perspectiva, então o índice é seguro
-            cartaEl.onclick = () => jogadorJogouCarta(index);
-        }
-        return cartaEl;
-    }
-    
-    // As funções de Truco e IA não precisam de grandes mudanças e são omitidas aqui para brevidade,
-    // mas estão no seu código original e devem funcionar com as correções acima.
-    // Inclua o restante do seu script original (pedirTruco, responderTruco, jogadaIA, etc.) aqui.
-    </script>
+    <script src="script.js"></script>
 </body>
 </html>
