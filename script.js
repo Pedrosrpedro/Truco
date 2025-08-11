@@ -1,142 +1,120 @@
-// server.js
+document.addEventListener('DOMContentLoaded', () => {
+    // --- ELEMENTOS DO JOGO ---
+    const playerHandDisplay = document.getElementById('human-player');
+    const viraDisplay = document.getElementById('vira');
+    const newGameButton = document.getElementById('new-game-button');
+    const playedCardsContainer = document.getElementById('played-cards-container');
 
-const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
+    // --- VARIÁVEIS DE ESTADO DO JOGO ---
+    const suits = { '♦': 'red', '♠': 'black', '♥': 'red', '♣': 'black' };
+    const ranks = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
+    let deck = [];
+    let playerHand = [];
+    // ... (mãos dos outros jogadores e outras variáveis virão aqui)
 
-const app = express();
-const server = http.createServer(app);
-const io = socketIo(server);
+    // --- FUNÇÕES DE LÓGICA DO JOGO ---
 
-// Serve o arquivo HTML principal quando alguém acessa o site
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/index.html');
-});
-
-const gameRooms = {}; // Objeto para armazenar o estado de todas as salas de jogo
-
-io.on('connection', (socket) => {
-    console.log(`Jogador conectado: ${socket.id}`);
-
-    // --- LÓGICA DE SALAS ---
-    socket.on('criarSala', () => {
-        const roomId = `SALA_${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-        socket.join(roomId);
-        gameRooms[roomId] = {
-            players: [{ id: socket.id, name: 'Jogador 1' }],
-            gameState: null
-        };
-        socket.emit('salaCriada', roomId);
-        console.log(`Sala criada: ${roomId} por ${socket.id}`);
-    });
-
-    socket.on('entrarNaSala', (roomId) => {
-        if (gameRooms[roomId] && gameRooms[roomId].players.length < 2) {
-            socket.join(roomId);
-            gameRooms[roomId].players.push({ id: socket.id, name: 'Jogador 2' });
-            console.log(`${socket.id} entrou na sala ${roomId}`);
-
-            // Avisa os dois jogadores que a partida vai começar
-            io.to(roomId).emit('partidaIniciada', { players: gameRooms[roomId].players });
-            iniciarNovaMao(roomId);
-        } else {
-            socket.emit('erro', 'A sala não existe ou está cheia.');
-        }
-    });
-
-    // --- LÓGICA DO JOGO ---
-    socket.on('jogarCarta', ({ roomId, carta }) => {
-        const room = gameRooms[roomId];
-        // Validação básica (quem jogou? é a vez dele?)
-        // (uma lógica mais robusta seria necessária para um jogo real)
-        
-        console.log(`Jogador ${socket.id} jogou ${carta.valor}${carta.naipe} na sala ${roomId}`);
-
-        // Avisa a todos na sala sobre a jogada
-        io.to(roomId).emit('cartaJogada', { jogadorId: socket.id, carta: carta });
-
-        // Aqui entraria a lógica de quem venceu a rodada, etc.
-        // Por simplicidade, essa parte terá que ser expandida.
-    });
-    
-    socket.on('pedirTruco', (roomId) => {
-        const player = gameRooms[roomId].players.find(p => p.id === socket.id);
-        // Emite para o OUTRO jogador
-        socket.to(roomId).emit('trucoRecebido', { message: `${player.name} pediu TRUCO!` });
-    });
-
-
-    socket.on('disconnect', () => {
-        console.log(`Jogador desconectado: ${socket.id}`);
-        // Encontra a sala em que o jogador estava e avisa o oponente
-        for (const roomId in gameRooms) {
-            const room = gameRooms[roomId];
-            const playerIndex = room.players.findIndex(p => p.id === socket.id);
-            if (playerIndex !== -1) {
-                // Remove o jogador da sala
-                room.players.splice(playerIndex, 1);
-                // Avisa o outro jogador
-                io.to(roomId).emit('oponenteDesconectou');
-                // Deleta a sala se estiver vazia
-                if (room.players.length === 0) {
-                    delete gameRooms[roomId];
-                    console.log(`Sala ${roomId} vazia, deletada.`);
-                }
-                break;
+    function createDeck() {
+        deck = [];
+        for (const suit in suits) {
+            for (const rank of ranks) {
+                deck.push({ rank, suit, color: suits[suit] });
             }
         }
-    });
-});
+    }
 
-function iniciarNovaMao(roomId) {
-    const room = gameRooms[roomId];
-    if (!room || room.players.length < 2) return;
-
-    const naipes = ['♦', '♠', '♥', '♣'];
-    const valores = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
-    let baralho = [];
-    for (const naipe of naipes) {
-        for (const valor of valores) {
-            baralho.push({ valor, naipe });
+    function shuffleDeck() {
+        for (let i = deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deck[i], deck[j]] = [deck[j], deck[i]];
         }
     }
 
-    // Embaralhar
-    for (let i = baralho.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [baralho[i], baralho[j]] = [baralho[j], baralho[i]];
+    function dealCards() {
+        // Por enquanto, vamos distribuir apenas para o jogador humano
+        playerHand = deck.splice(0, 3);
+        // Os outros 9 cartas seriam para os CPUs
+        deck.splice(0, 9); 
+        
+        const vira = deck.pop();
+        
+        updateUI(vira);
     }
 
-    const vira = baralho[6];
-    const viraIndex = valores.indexOf(vira.valor);
-    const manilha = viraIndex === valores.length - 1 ? valores[0] : valores[viraIndex + 1];
+    // --- FUNÇÕES DE ATUALIZAÇÃO DA INTERFACE (UI) ---
 
-    const maoJogador1 = baralho.slice(0, 3);
-    const maoJogador2 = baralho.slice(3, 6);
+    function createCardElement(card, index) {
+        if (!card) return document.createElement('div'); // Retorna div vazia se a carta for nula
 
-    room.gameState = {
-        placarNos: 0, // Jogador 1
-        placarEles: 0, // Jogador 2
-        vira: vira,
-        manilha: manilha,
-        turno: room.players[0].id // O primeiro a entrar começa jogando
-    };
+        const cardDiv = document.createElement('div');
+        cardDiv.className = `card ${card.color}`;
+        // Adiciona um 'data-index' para sabermos qual carta foi clicada
+        if (index !== undefined) {
+            cardDiv.dataset.index = index;
+        }
+        
+        cardDiv.innerHTML = `<span class="value">${card.rank}</span><span class="suit">${card.suit}</span>`;
+        
+        // Adiciona o evento de clique diretamente aqui
+        cardDiv.addEventListener('click', handleCardClick);
+        
+        return cardDiv;
+    }
     
-    // Envia para cada jogador sua mão específica e o estado do jogo
-    io.to(room.players[0].id).emit('maoRecebida', { 
-        mao: maoJogador1, 
-        gameState: room.gameState 
-    });
-    io.to(room.players[1].id).emit('maoRecebida', { 
-        mao: maoJogador2, 
-        gameState: room.gameState 
-    });
+    function updateUI(vira) {
+        // Limpa a mão do jogador e a mesa
+        playerHandDisplay.innerHTML = '';
+        playedCardsContainer.innerHTML = '';
+        
+        // Mostra as cartas do jogador
+        playerHand.forEach((card, index) => {
+            playerHandDisplay.appendChild(createCardElement(card, index));
+        });
+        
+        // Mostra a carta Vira
+        viraDisplay.innerHTML = createCardElement(vira).innerHTML;
+        viraDisplay.className = `card ${vira.color}`; // Garante que a cor da vira esteja correta
+    }
+    
+    // --- FUNÇÕES DE MANIPULAÇÃO DE EVENTOS ---
+    
+    function handleCardClick(event) {
+        // 'currentTarget' é o elemento .card que tem o listener
+        const cardDiv = event.currentTarget; 
+        const cardIndex = cardDiv.dataset.index;
+        
+        if (cardIndex === undefined) return;
 
-    console.log(`Nova mão distribuída na sala ${roomId}`);
-}
+        const playedCard = playerHand[cardIndex];
 
+        console.log(`Jogador jogou: ${playedCard.rank} de ${playedCard.suit}`);
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Servidor ouvindo na porta ${PORT}`);
+        // Move a carta para a mesa
+        cardDiv.classList.add('played-card');
+        cardDiv.id = 'played-card-player';
+        playedCardsContainer.appendChild(cardDiv);
+
+        // Lógica da IA viria aqui
+        // Por enquanto, vamos simular uma jogada da IA depois de 1 segundo
+        setTimeout(() => {
+            alert("Vez da IA jogar!");
+            // Aqui você implementaria a lógica para a IA escolher e jogar uma carta.
+        }, 1000);
+    }
+
+    function startNewGame() {
+        console.log("Iniciando novo jogo...");
+        createDeck();
+        shuffleDeck();
+        dealCards();
+        // Resetar placares e outros estados de jogo viria aqui
+        document.getElementById('player-score').textContent = '0';
+        document.getElementById('cpu-score').textContent = '0';
+    }
+
+    // --- INICIALIZAÇÃO DO JOGO ---
+    newGameButton.addEventListener('click', startNewGame);
+    
+    // Inicia o primeiro jogo assim que a página carrega
+    startNewGame();
 });
