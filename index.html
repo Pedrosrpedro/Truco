@@ -3,292 +3,691 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Truco P2P (Host/Cliente)</title>
+    <title>Truco com IA e P2P</title>
     <!-- 1. Importando a biblioteca PeerJS de um CDN -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peer.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #0d47a1; color: white; text-align: center; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        .placar { display: flex; justify-content: space-around; font-size: 24px; margin-bottom: 20px; }
-        .mesa { background-color: #00695c; border: 5px solid #004d40; border-radius: 10px; padding: 20px; margin: 20px 0; min-height: 250px; display: flex; justify-content: space-around; align-items: center; }
-        .area-cartas { display: flex; gap: 10px; justify-content: center; }
-        .carta { width: 80px; height: 120px; background-color: white; border: 1px solid black; border-radius: 5px; position: relative; color: black; font-size: 24px; font-weight: bold; }
-        .carta-jogador { cursor: pointer; transition: transform 0.2s; }
-        .carta-jogador:hover { transform: translateY(-10px); }
-        .carta .valor { position: absolute; top: 5px; left: 5px; }
-        .carta .naipe { font-size: 40px; position: absolute; bottom: 5px; right: 5px; }
-        .carta.manilha { border: 3px solid gold; }
-        .carta-placeholder { width: 80px; height: 120px; background-color: rgba(0,0,0,0.2); border: 2px dashed #FFF; border-radius: 5px; }
-        .carta-virada-oponente { width: 80px; height: 120px; background-color: #B71C1C; border-radius: 5px; }
-        .botoes button, .login-area button, .login-area input { padding: 10px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin: 5px; }
-        #game-area { display: none; }
-        #login-area { background-color: #004d40; padding: 20px; border-radius: 10px; }
-        #meu-id-display { font-size: 1.2em; background: #FFF; color: #000; padding: 5px 10px; border-radius: 5px; user-select: all; cursor: pointer; }
-        #status { min-height: 25px; margin-top: 15px; font-size: 1.1em; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d47a1; color: white; text-align: center; padding: 15px; }
+        .container { max-width: 900px; margin: 0 auto; background-color: #002171; padding: 20px; border-radius: 15px; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+        h1 { color: #bbdefb; }
+        .placar { display: flex; justify-content: space-around; font-size: 28px; margin-bottom: 20px; font-weight: bold; }
+        .mesa { background-color: #00695c; border: 5px solid #004d40; border-radius: 10px; padding: 20px; margin: 20px 0; min-height: 270px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; gap: 20px; }
+        .area-cartas { display: flex; gap: 10px; justify-content: center; align-items: center; }
+        .carta { width: 80px; height: 120px; background-color: white; border: 2px solid black; border-radius: 8px; position: relative; color: black; font-size: 24px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; box-shadow: 3px 3px 5px rgba(0,0,0,0.3); }
+        .carta-jogador { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        .carta-jogador:hover { transform: translateY(-15px); box-shadow: 0 10px 15px rgba(0,0,0,0.4); }
+        .carta.manilha { border: 4px solid gold; box-shadow: 0 0 10px gold; }
+        .carta .valor { align-self: flex-start; }
+        .carta .naipe { font-size: 40px; align-self: flex-end; }
+        .carta-placeholder { width: 80px; height: 120px; background-color: rgba(0,0,0,0.2); border: 2px dashed #FFF; border-radius: 5px; display: flex; justify-content: center; align-items: center; font-size: 14px; }
+        .carta-virada-oponente { width: 80px; height: 120px; background: linear-gradient(45deg, #B71C1C, #f44336); border: 2px solid #6a0000; border-radius: 8px; box-shadow: 3px 3px 5px rgba(0,0,0,0.3); }
+        .botoes-acao button, .area-setup button, .area-setup select, .area-setup input { padding: 12px 24px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin: 5px; background-color: #fbc02d; color: #000; font-weight: bold; transition: background-color 0.2s; }
+        .botoes-acao button:hover, .area-setup button:hover { background-color: #fdd835; }
+        .botoes-acao button:disabled { background-color: #9e9e9e; cursor: not-allowed; }
+        #game-screen, #p2p-setup, #ia-setup { display: none; }
+        .area-setup { background-color: #004d40; padding: 25px; border-radius: 10px; margin-bottom: 20px; }
+        #meu-id-display { font-size: 1.2em; background: #FFF; color: #000; padding: 5px 10px; border-radius: 5px; user-select: all; cursor: pointer; display: inline-block; margin-top: 10px;}
+        #status, #mensagem { min-height: 25px; margin-top: 15px; font-size: 1.2em; font-weight: bold; color: #ffeb3b; }
+        #rodada-info { font-size: 1.1em; color: #e1f5fe; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Truco P2P (sem servidor)</h1>
+        <h1>Truco P2P & IA</h1>
 
-        <div id="login-area">
+        <div id="mode-selection" class="area-setup">
+            <h2>Escolha o Modo de Jogo</h2>
+            <button id="btn-mode-p2p">Online (P2P)</button>
+            <button id="btn-mode-ia">Contra IA</button>
+        </div>
+
+        <div id="p2p-setup" class="area-setup">
             <h3>Conexão P2P</h3>
             <button id="btn-criar">1. Criar Jogo (Ser o Host)</button>
-            <div id="host-info" style="display:none; margin-top:15px;">
-                <p>Envie este ID para seu amigo:</p>
-                <code id="meu-id-display"></code>
-            </div>
-            <hr>
+            <p>Seu ID aparecerá aqui. Envie para seu amigo.</p>
+            <code id="meu-id-display"></code>
+            <hr style="margin: 20px 0;">
             <input type="text" id="input-oponente-id" placeholder="2. Cole o ID do Host aqui">
             <button id="btn-entrar">Entrar no Jogo</button>
             <div id="status">Aguardando conexão...</div>
         </div>
 
-        <div id="game-area">
-            <!-- Estrutura do jogo (placar, mesa, cartas) igual à anterior -->
-            <div class="placar">
-                <div>Você: <span id="placar-nos">0</span></div>
-                <div>Oponente: <span id="placar-eles">0</span></div>
-            </div>
+        <div id="ia-setup" class="area-setup">
+            <h3>Jogar contra a IA</h3>
+            <label for="dificuldade-ia">Escolha a dificuldade:</label>
+            <select id="dificuldade-ia">
+                <option value="facil">Fácil</option>
+                <option value="medio">Médio</option>
+                <option value="dificil">Difícil</option>
+            </select>
+            <button id="btn-start-ia">Iniciar Jogo contra IA</button>
+        </div>
 
+        <div id="game-screen">
+            <div class="placar">
+                <div id="placar-jogador-label">Você: <span id="placar-nos">0</span></div>
+                <div id="placar-oponente-label">Oponente: <span id="placar-eles">0</span></div>
+            </div>
+            <div id="rodada-info"></div>
+            
             <div class="mesa">
                 <div id="area-oponente" class="area-cartas"></div>
-                <div id="area-vira"></div>
-                <div id="area-mesa" class="area-cartas">
-                    <div id="mesa-oponente" class="carta-placeholder"></div>
-                    <div id="mesa-jogador" class="carta-placeholder"></div>
+                <div class="area-cartas">
+                    <div id="mesa-oponente" class="carta-placeholder">Oponente</div>
+                    <div id="area-vira" class="carta-placeholder">Vira</div>
+                    <div id="mesa-jogador" class="carta-placeholder">Você</div>
                 </div>
             </div>
 
             <div id="area-jogador" class="area-cartas"></div>
             
-            <div class="botoes">
-                <button id="btn-truco">TRUCO!</button>
-                <button id="btn-nova-mao">Nova Mão (Apenas Host)</button>
+            <div id="botoes-acao" class="botoes-acao">
+                 <!-- Botões de Truco serão inseridos aqui dinamicamente -->
             </div>
             <div id="mensagem" style="margin-top: 15px; font-size: 1.2em; min-height: 25px;"></div>
         </div>
     </div>
 
     <script>
-        // --- Elementos da UI ---
-        const loginArea = document.getElementById('login-area');
-        const gameArea = document.getElementById('game-area');
-        const btnCriar = document.getElementById('btn-criar');
-        const btnEntrar = document.getElementById('btn-entrar');
-        const meuIdDisplay = document.getElementById('meu-id-display');
-        const hostInfo = document.getElementById('host-info');
-        const inputOponenteId = document.getElementById('input-oponente-id');
-        const statusEl = document.getElementById('status');
-        const mensagemEl = document.getElementById('mensagem');
-        const areaJogadorEl = document.getElementById('area-jogador');
-        // ... (outros elementos da UI do jogo)
+    // ELEMENTOS DA UI
+    const modeSelection = document.getElementById('mode-selection');
+    const p2pSetup = document.getElementById('p2p-setup');
+    const iaSetup = document.getElementById('ia-setup');
+    const gameScreen = document.getElementById('game-screen');
+    const statusEl = document.getElementById('status');
+    const mensagemEl = document.getElementById('mensagem');
+    
+    // VARIÁVEIS DE ESTADO DO JOGO
+    let peer;
+    let conn;
+    let meuId;
+    let souHost = false;
+    let gameState = {};
 
-        // --- Variáveis de Conexão e Jogo ---
-        let peer;
-        let conn; // A conexão de dados
-        let meuId;
-        let souHost = false;
-        let minhaMao = [];
-        let manilhaValor = '';
+    const FORCA_CARTAS = { '4': 0, '5': 1, '6': 2, '7': 3, 'Q': 4, 'J': 5, 'K': 6, 'A': 7, '2': 8, '3': 9 };
+    const NAIPES_FORCA = { '♦': 10, '♠': 11, '♥': 12, '♣': 13 }; // Ouros, Espadas, Copas, Paus (Zap)
 
-        function inicializarPeer() {
-            // Conecta ao servidor de sinalização público do PeerJS
-            peer = new Peer(); 
-
-            // Evento disparado quando obtemos nosso ID
-            peer.on('open', (id) => {
-                meuId = id;
-                console.log('Meu ID de peer é: ' + id);
-                statusEl.textContent = 'Pronto para criar ou entrar em um jogo.';
-            });
-
-            // Evento disparado quando um cliente tenta se conectar (só para o host)
-            peer.on('connection', (newConn) => {
-                if (conn) { // Se já temos uma conexão, recusamos a nova
-                    newConn.close();
-                    return;
-                }
-                conn = newConn;
-                souHost = true;
-                iniciarConexao();
-            });
-
-            peer.on('error', (err) => {
-                alert('Ocorreu um erro com a conexão P2P: ' + err.message);
-                console.error(err);
-            });
-        }
-        
-        btnCriar.addEventListener('click', () => {
-            if (!meuId) {
-                alert('Aguardando ID de conexão, tente novamente em um segundo.');
-                return;
-            }
-            souHost = true;
-            meuIdDisplay.textContent = meuId;
-            hostInfo.style.display = 'block';
-            statusEl.textContent = 'Aguardando oponente se conectar...';
-            btnCriar.disabled = true;
-            btnEntrar.disabled = true;
-            inputOponenteId.disabled = true;
-        });
-
-        btnEntrar.addEventListener('click', () => {
-            const oponenteId = inputOponenteId.value.trim();
-            if (!oponenteId) {
-                alert('Por favor, insira o ID do Host.');
-                return;
-            }
-            conn = peer.connect(oponenteId);
-            iniciarConexao();
-        });
-
-        function iniciarConexao() {
-            if (!conn) return;
-
-            conn.on('open', () => {
-                console.log('Conexão estabelecida!');
-                statusEl.textContent = 'Conectado!';
-                loginArea.style.display = 'none';
-                gameArea.style.display = 'block';
-
-                if (souHost) {
-                    // O Host é responsável por iniciar a primeira mão
-                    document.getElementById('btn-nova-mao').style.display = 'inline-block';
-                    iniciarNovaMao();
-                } else {
-                    document.getElementById('btn-nova-mao').style.display = 'none';
-                    mensagemEl.textContent = 'Conectado! Aguardando o Host iniciar a mão.';
-                }
-            });
-
-            // Onde a mágica acontece: recebendo dados
-            conn.on('data', (data) => {
-                console.log('Dado recebido:', data);
-                // Aqui vamos processar todos os tipos de mensagens
-                if (data.type === 'mao') {
-                    minhaMao = data.mao;
-                    manilhaValor = data.gameState.manilha;
-                    desenharMao(minhaMao, manilhaValor);
-                    desenharVira(data.gameState.vira, manilhaValor);
-                    desenharMaoOponente(minhaMao.length);
-                    mensagemEl.textContent = 'Sua vez de jogar!';
-                }
-                if (data.type === 'cartaJogada') {
-                    // Atualiza a mesa do oponente
-                    const cartaEl = criarElementoCarta(data.carta, manilhaValor);
-                    document.getElementById('mesa-oponente').innerHTML = '';
-                    document.getElementById('mesa-oponente').appendChild(cartaEl);
-                }
-            });
-            
-            conn.on('close', () => {
-                alert('O oponente desconectou.');
-                gameArea.style.display = 'none';
-                loginArea.style.display = 'block';
-            });
-        }
-
-        // Função para enviar qualquer tipo de dado para o oponente
-        function enviarDado(data) {
-            if (conn && conn.open) {
-                conn.send(data);
-            }
-        }
-
-        // --- LÓGICA DO JOGO (Adaptada para P2P) ---
-
-        document.getElementById('btn-nova-mao').addEventListener('click', () => {
-            if(souHost) iniciarNovaMao();
-        });
-
-        function iniciarNovaMao() {
-            if (!souHost) return; // Apenas o host pode iniciar uma mão
-
-            const naipes = ['♦', '♠', '♥', '♣'];
-            const valores = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
-            let baralho = [];
-            for (const naipe of naipes) {
-                for (const valor of valores) {
-                    baralho.push({ valor, naipe });
-                }
-            }
-            // Embaralhar...
-            for (let i = baralho.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [baralho[i], baralho[j]] = [baralho[j], baralho[i]];
-            }
-
-            const vira = baralho[6];
-            const viraIndex = valores.indexOf(vira.valor);
-            const manilha = viraIndex === valores.length - 1 ? valores[0] : valores[viraIndex + 1];
-
-            const maoHost = baralho.slice(0, 3);
-            const maoCliente = baralho.slice(3, 6);
-
-            const gameState = { vira: vira, manilha: manilha };
-
-            // O Host configura sua própria tela
-            minhaMao = maoHost;
-            manilhaValor = gameState.manilha;
-            desenharMao(minhaMao, manilhaValor);
-            desenharVira(gameState.vira, manilhaValor);
-            desenharMaoOponente(maoCliente.length);
-            mensagemEl.textContent = 'Sua vez de jogar!';
-
-            // O Host envia a mão e o estado do jogo para o Cliente
-            enviarDado({ type: 'mao', mao: maoCliente, gameState: gameState });
-        }
-        
-        // --- Funções de Desenho (praticamente inalteradas) ---
-        function criarElementoCarta(carta, manilha, isJogador = false) {
-            const cartaEl = document.createElement('div');
-            cartaEl.classList.add('carta');
-            if (isJogador) cartaEl.classList.add('carta-jogador');
-            if (carta.valor === manilha) cartaEl.classList.add('manilha');
-
-            cartaEl.innerHTML = `<div class="valor">${carta.valor}</div><div class="naipe">${carta.naipe}</div>`;
-            
-            if (isJogador) {
-                cartaEl.addEventListener('click', () => {
-                    // Atualiza a UI localmente
-                    const index = minhaMao.findIndex(c => c.valor === carta.valor && c.naipe === carta.naipe);
-                    if (index > -1) {
-                        minhaMao.splice(index, 1);
-                        desenharMao(minhaMao, manilha);
-                        document.getElementById('mesa-jogador').innerHTML = '';
-                        document.getElementById('mesa-jogador').appendChild(criarElementoCarta(carta, manilha));
-                    }
-                    // Envia a jogada para o oponente
-                    enviarDado({ type: 'cartaJogada', carta: carta });
-                });
-            }
-            return cartaEl;
-        }
-
-        function desenharMao(mao, manilha) {
-            areaJogadorEl.innerHTML = '';
-            mao.forEach(carta => areaJogadorEl.appendChild(criarElementoCarta(carta, manilha, true)));
-        }
-        
-        function desenharVira(vira, manilha) {
-            document.getElementById('area-vira').innerHTML = '';
-            document.getElementById('area-vira').appendChild(criarElementoCarta(vira, manilha));
-        }
-        
-        function desenharMaoOponente(numCartas) {
-            const areaOponenteEl = document.getElementById('area-oponente');
-            areaOponenteEl.innerHTML = '';
-            for(let i=0; i<numCartas; i++) {
-                const cartaVirada = document.createElement('div');
-                cartaVirada.classList.add('carta-virada-oponente');
-                areaOponenteEl.appendChild(cartaVirada);
-            }
-        }
-        
-        // Inicia o processo de conexão ao carregar a página
+    // --- LÓGICA DE SELEÇÃO DE MODO ---
+    document.getElementById('btn-mode-p2p').addEventListener('click', () => {
+        modeSelection.style.display = 'none';
+        p2pSetup.style.display = 'block';
         inicializarPeer();
+    });
+
+    document.getElementById('btn-mode-ia').addEventListener('click', () => {
+        modeSelection.style.display = 'none';
+        iaSetup.style.display = 'block';
+    });
+
+    document.getElementById('btn-start-ia').addEventListener('click', () => {
+        const dificuldade = document.getElementById('dificuldade-ia').value;
+        iaSetup.style.display = 'none';
+        gameScreen.style.display = 'block';
+        
+        gameState = criarEstadoInicial();
+        gameState.gameMode = 'ia';
+        gameState.iaDificuldade = dificuldade;
+        
+        document.getElementById('placar-oponente-label').textContent = `IA (${dificuldade}): `;
+        document.getElementById('placar-eles').textContent = '0';
+        
+        iniciarNovaMao();
+    });
+
+    // --- LÓGICA DE CONEXÃO P2P ---
+    function inicializarPeer() {
+        // Usando um servidor de sinalização público conhecido por ser mais estável
+        peer = new Peer(undefined, {
+            host: 'peerjs.92k.de',
+            port: 443,
+            path: '/'
+        });
+
+        peer.on('open', id => {
+            meuId = id;
+            document.getElementById('meu-id-display').textContent = id;
+            statusEl.textContent = 'Pronto para criar ou entrar.';
+        });
+
+        peer.on('connection', newConn => {
+            if (conn && conn.open) {
+                newConn.close();
+                return;
+            }
+            conn = newConn;
+            souHost = true;
+            configurarConexao();
+        });
+
+        peer.on('error', err => {
+            alert('Erro de conexão P2P: ' + err.message);
+            console.error(err);
+        });
+    }
+
+    document.getElementById('btn-criar').addEventListener('click', () => {
+        souHost = true;
+        statusEl.textContent = 'Aguardando oponente se conectar...';
+    });
+
+    document.getElementById('btn-entrar').addEventListener('click', () => {
+        const oponenteId = document.getElementById('input-oponente-id').value.trim();
+        if (!oponenteId) {
+            alert('Insira o ID do Host.');
+            return;
+        }
+        conn = peer.connect(oponenteId);
+        configurarConexao();
+    });
+    
+    function configurarConexao() {
+        conn.on('open', () => {
+            p2pSetup.style.display = 'none';
+            gameScreen.style.display = 'block';
+            gameState = criarEstadoInicial();
+            gameState.gameMode = 'p2p';
+
+            if (souHost) {
+                iniciarNovaMao();
+            } else {
+                mensagemEl.textContent = 'Conectado! Aguardando o Host iniciar.';
+            }
+        });
+
+        conn.on('data', (data) => {
+            console.log('Dado recebido:', data);
+            if (data.type === 'gameStateUpdate') {
+                gameState = data.state;
+                atualizarUI();
+            } else if (data.type === 'syncRequest') {
+                 // O cliente está pedindo o estado atualizado
+                enviarEstadoJogo();
+            }
+        });
+
+        conn.on('close', () => {
+            alert('Oponente desconectou.');
+            location.reload();
+        });
+    }
+
+    function enviarEstadoJogo() {
+        if (gameState.gameMode === 'p2p' && conn && conn.open) {
+            conn.send({ type: 'gameStateUpdate', state: gameState });
+        }
+    }
+    
+    // --- LÓGICA CENTRAL DO JOGO ---
+
+    function criarEstadoInicial() {
+        return {
+            gameMode: null,
+            iaDificuldade: null,
+            placarNos: 0,
+            placarEles: 0,
+            maoNos: [],
+            maoEles: [],
+            cartasJogadasNos: [],
+            cartasJogadasEles: [],
+            vira: null,
+            manilha: null,
+            baralho: [],
+            turnoDe: souHost ? 'nos' : 'eles',
+            rodadaAtual: 1,
+            placarRodada: { nos: 0, eles: 0 },
+            valorDaMao: 1,
+            quemPediuTruco: null,
+            estadoTruco: null, // 'pendente'
+            maoDeOnze: false,
+            vencedorMao: null,
+        };
+    }
+    
+    function criarBaralho() {
+        const naipes = ['♦', '♠', '♥', '♣'];
+        const valores = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
+        let baralho = [];
+        for (const naipe of naipes) {
+            for (const valor of valores) {
+                baralho.push({ valor, naipe });
+            }
+        }
+        // Embaralhar
+        for (let i = baralho.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [baralho[i], baralho[j]] = [baralho[j], baralho[i]];
+        }
+        return baralho;
+    }
+
+    function iniciarNovaMao() {
+        // Apenas o Host (ou o jogo no modo IA) pode iniciar uma mão
+        if (gameState.gameMode === 'p2p' && !souHost) return;
+
+        // Resetar estado da mão
+        gameState.baralho = criarBaralho();
+        gameState.vira = gameState.baralho.pop();
+        const viraIndex = Object.keys(FORCA_CARTAS).indexOf(gameState.vira.valor);
+        const valoresOrdenados = Object.keys(FORCA_CARTAS);
+        gameState.manilha = viraIndex === valoresOrdenados.length - 1 ? valoresOrdenados[0] : valoresOrdenados[viraIndex + 1];
+        
+        gameState.maoNos = gameState.baralho.splice(0, 3);
+        gameState.maoEles = gameState.baralho.splice(0, 3);
+        
+        gameState.cartasJogadasNos = [];
+        gameState.cartasJogadasEles = [];
+        gameState.rodadaAtual = 1;
+        gameState.placarRodada = { nos: 0, eles: 0 };
+        gameState.valorDaMao = 1;
+        gameState.quemPediuTruco = null;
+        gameState.estadoTruco = null;
+        gameState.vencedorMao = null;
+
+        // Lógica da Mão de Onze
+        if (gameState.placarNos === 11 || gameState.placarEles === 11) {
+            gameState.maoDeOnze = true;
+            gameState.valorDaMao = 3;
+        } else {
+            gameState.maoDeOnze = false;
+        }
+        
+        // Determina quem começa a próxima mão (quem ganhou a anterior)
+        if (gameState.vencedorUltimaMao) {
+            gameState.turnoDe = gameState.vencedorUltimaMao;
+        } else {
+            // Alterna o início se não houver vencedor (ou no começo do jogo)
+            gameState.turnoDe = gameState.turnoDe === 'nos' ? 'eles' : 'nos';
+        }
+        
+        if (gameState.gameMode === 'p2p') {
+            enviarEstadoJogo();
+        }
+        
+        atualizarUI();
+        verificarTurnoIA();
+    }
+    
+    function getForcaCarta(carta) {
+        let forca = FORCA_CARTAS[carta.valor];
+        if (carta.valor === gameState.manilha) {
+            forca = 100 + NAIPES_FORCA[carta.naipe]; // Manilhas são mais fortes que qualquer outra
+        }
+        return forca;
+    }
+
+    function jogadorJogouCarta(index) {
+        const meuID = (gameState.gameMode === 'p2p' && !souHost) ? 'eles' : 'nos';
+        if (gameState.turnoDe !== meuID || gameState.estadoTruco === 'pendente') return;
+
+        const mao = meuID === 'nos' ? gameState.maoNos : gameState.maoEles;
+        const cartaJogada = mao.splice(index, 1)[0];
+        
+        if (meuID === 'nos') {
+            gameState.cartasJogadasNos.push(cartaJogada);
+        } else {
+            gameState.cartasJogadasEles.push(cartaJogada);
+        }
+
+        // Alterna o turno
+        gameState.turnoDe = (meuID === 'nos') ? 'eles' : 'nos';
+
+        // Verifica se a rodada terminou
+        if (gameState.cartasJogadasNos.length === gameState.cartasJogadasEles.length) {
+            setTimeout(avaliarRodada, 1000);
+        } else {
+             if (gameState.gameMode === 'p2p') {
+                enviarEstadoJogo();
+            }
+            atualizarUI();
+            verificarTurnoIA();
+        }
+    }
+
+    function avaliarRodada() {
+        const cartaNos = gameState.cartasJogadasNos[gameState.rodadaAtual - 1];
+        const cartaEles = gameState.cartasJogadasEles[gameState.rodadaAtual - 1];
+        const forcaNos = getForcaCarta(cartaNos);
+        const forcaEles = getForcaCarta(cartaEles);
+        let vencedorRodada;
+
+        if (forcaNos > forcaEles) {
+            vencedorRodada = 'nos';
+            gameState.placarRodada.nos++;
+        } else if (forcaEles > forcaNos) {
+            vencedorRodada = 'eles';
+            gameState.placarRodada.eles++;
+        } else {
+            vencedorRodada = 'empate';
+            gameState.placarRodada.nos++;
+            gameState.placarRodada.eles++;
+        }
+
+        // Quem ganhou a rodada, começa a próxima
+        gameState.turnoDe = vencedorRodada === 'empate' ? 'ninguem' : vencedorRodada;
+
+        // Checar se a mão terminou
+        let vencedorMao = null;
+        if (gameState.placarRodada.nos >= 2 && gameState.placarRodada.nos > gameState.placarRodada.eles) {
+            vencedorMao = 'nos';
+        } else if (gameState.placarRodada.eles >= 2 && gameState.placarRodada.eles > gameState.placarRodada.nos) {
+            vencedorMao = 'eles';
+        } else if (gameState.rodadaAtual === 1 && vencedorRodada === 'empate') {
+           // A regra do truco diz que quem ganhar a segunda, ganha a mão.
+        } else if (gameState.rodadaAtual === 2 && vencedorRodada === 'empate') {
+            // Se a primeira foi vencida por X e a segunda empatou, X ganha.
+            if(gameState.primeiroVencedor === 'nos') vencedorMao = 'nos';
+            if(gameState.primeiroVencedor === 'eles') vencedorMao = 'eles';
+        }
+
+        if(vencedorRodada !== 'empate' && gameState.rodadaAtual === 1) {
+            gameState.primeiroVencedor = vencedorRodada;
+        }
+
+        if (gameState.rodadaAtual === 3 || vencedorMao) {
+            if (!vencedorMao) { // Decide na terceira rodada
+                 if (gameState.placarRodada.nos > gameState.placarRodada.eles) vencedorMao = 'nos';
+                 else if (gameState.placarRodada.eles > gameState.placarRodada.nos) vencedorMao = 'eles';
+                 else vencedorMao = 'ninguem'; // Empate em tudo
+            }
+            finalizarMao(vencedorMao);
+        } else {
+            gameState.rodadaAtual++;
+            if (gameState.turnoDe === 'ninguem') { // Se empatou, quem jogou a mão anterior começa
+                gameState.turnoDe = gameState.primeiroVencedor === 'nos' ? 'eles' : 'nos';
+            }
+            if (gameState.gameMode === 'p2p') enviarEstadoJogo();
+            atualizarUI();
+            verificarTurnoIA();
+        }
+    }
+    
+    function finalizarMao(vencedor) {
+        if (vencedor !== 'ninguem') {
+            gameState[vencedor === 'nos' ? 'placarNos' : 'placarEles'] += gameState.valorDaMao;
+            gameState.vencedorUltimaMao = vencedor;
+        } else {
+            gameState.vencedorUltimaMao = null; // Ninguém ganhou, ninguém começa
+        }
+        
+        mensagemEl.textContent = vencedor === 'ninguem' ? `Mão empatada!` : `Ponto para ${vencedor === 'nos' ? 'você' : 'o oponente'}!`;
+
+        if (gameState.placarNos >= 12 || gameState.placarEles >= 12) {
+            // Fim de jogo
+            const ganhadorFinal = gameState.placarNos >= 12 ? 'Você' : 'Oponente';
+            mensagemEl.textContent = `FIM DE JOGO! ${ganhadorFinal} venceu!`;
+            // Travar tudo
+        } else {
+             setTimeout(() => {
+                iniciarNovaMao();
+            }, 2500);
+        }
+
+        if (gameState.gameMode === 'p2p') enviarEstadoJogo();
+        atualizarUI();
+    }
+
+
+    // --- LÓGICA DE TRUCO ---
+    function pedirTruco() {
+        const meuID = (gameState.gameMode === 'p2p' && !souHost) ? 'eles' : 'nos';
+        if(gameState.maoDeOnze) return;
+
+        let novoValor;
+        if (gameState.valorDaMao === 1) novoValor = 3;
+        else if (gameState.valorDaMao === 3) novoValor = 6;
+        else if (gameState.valorDaMao === 6) novoValor = 9;
+        else if (gameState.valorDaMao === 9) novoValor = 12;
+        else return; // Não pode aumentar mais
+
+        gameState.valorDaMao = novoValor;
+        gameState.estadoTruco = 'pendente';
+        gameState.quemPediuTruco = meuID;
+        gameState.turnoDe = (meuID === 'nos' ? 'eles' : 'nos');
+        
+        if (gameState.gameMode === 'p2p') enviarEstadoJogo();
+        atualizarUI();
+        verificarTurnoIA();
+    }
+
+    function responderTruco(resposta) {
+        if (resposta === 'aceitar') {
+            gameState.estadoTruco = null; // Jogo continua valendo mais
+            // Quem aceitou começa a jogar
+            gameState.turnoDe = gameState.quemPediuTruco === 'nos' ? 'eles' : 'nos';
+        } else if (resposta === 'correr') {
+            const vencedor = gameState.quemPediuTruco;
+            const valorAntesDoTruco = gameState.valorDaMao === 3 ? 1 : (gameState.valorDaMao / 3) * 3 - 3;
+            gameState.valorDaMao = valorAntesDoTruco;
+            finalizarMao(vencedor);
+        } else if (resposta === 'aumentar') {
+            pedirTruco(); // Inverte o pedido
+            return;
+        }
+
+        if (gameState.gameMode === 'p2p') enviarEstadoJogo();
+        atualizarUI();
+        verificarTurnoIA();
+    }
+
+    // --- INTELIGÊNCIA ARTIFICIAL ---
+    function verificarTurnoIA() {
+        if (gameState.gameMode === 'ia' && gameState.turnoDe === 'eles') {
+            setTimeout(jogadaIA, 1500); // Dar um tempo para IA "pensar"
+        }
+    }
+
+    function jogadaIA() {
+        if(gameState.estadoTruco === 'pendente') {
+            decidirRespostaTrucoIA();
+        } else {
+            decidirJogadaIA();
+        }
+    }
+
+    function decidirJogadaIA() {
+        const maoIA = gameState.maoEles;
+        let melhorCartaIndex = 0;
+        let piorCartaIndex = 0;
+        for (let i = 1; i < maoIA.length; i++) {
+            if (getForcaCarta(maoIA[i]) > getForcaCarta(maoIA[melhorCartaIndex])) melhorCartaIndex = i;
+            if (getForcaCarta(maoIA[i]) < getForcaCarta(maoIA[piorCartaIndex])) piorCartaIndex = i;
+        }
+        
+        let forcaMao = maoIA.reduce((acc, c) => acc + getForcaCarta(c), 0);
+        
+        // Decidir se pede truco
+        if (gameState.valorDaMao === 1 && !gameState.estadoTruco) {
+            let chanceTruco = 0;
+            if(gameState.iaDificuldade === 'medio' && forcaMao > 110) chanceTruco = 0.5;
+            if(gameState.iaDificuldade === 'dificil' && forcaMao > 15) chanceTruco = 0.7; // Blefa mais
+            if(forcaMao > 200) chanceTruco = 0.9; // Quase certeza
+
+            if (Math.random() < chanceTruco) {
+                pedirTruco();
+                return;
+            }
+        }
+
+        let indexEscolhido;
+        switch (gameState.iaDificuldade) {
+            case 'facil':
+                indexEscolhido = Math.floor(Math.random() * maoIA.length);
+                break;
+            case 'medio':
+                // Joga a pior carta se for o primeiro a jogar na rodada
+                 indexEscolhido = (gameState.cartasJogadasNos.length === gameState.cartasJogadasEles.length) ? piorCartaIndex : melhorCartaIndex;
+                break;
+            case 'dificil':
+                 // Estratégia mais avançada
+                 if (gameState.cartasJogadasNos.length > gameState.cartasJogadasEles.length) {
+                    // O jogador já jogou, IA precisa responder
+                    const cartaJogador = gameState.cartasJogadasNos[gameState.rodadaAtual - 1];
+                    // Tenta ganhar com a carta mais fraca possível
+                    let melhorOpcaoParaGanhar = -1;
+                    let menorForcaParaGanhar = Infinity;
+
+                    for(let i = 0; i < maoIA.length; i++) {
+                        if(getForcaCarta(maoIA[i]) > getForcaCarta(cartaJogador)) {
+                            if(getForcaCarta(maoIA[i]) < menorForcaParaGanhar) {
+                                menorForcaParaGanhar = getForcaCarta(maoIA[i]);
+                                melhorOpcaoParaGanhar = i;
+                            }
+                        }
+                    }
+                    // Se pode ganhar, joga a mais fraca que ganha. Senão, joga a pior de todas.
+                    indexEscolhido = (melhorOpcaoParaGanhar !== -1) ? melhorOpcaoParaGanhar : piorCartaIndex;
+                 } else {
+                     // IA é a primeira a jogar na rodada
+                     // Se já ganhou uma, joga a mais forte pra tentar fechar
+                     if(gameState.placarRodada.eles === 1) indexEscolhido = melhorCartaIndex;
+                     else indexEscolhido = piorCartaIndex; // Senão, começa com a pior
+                 }
+                break;
+        }
+        jogadorJogouCarta(indexEscolhido);
+    }
+    
+    function decidirRespostaTrucoIA(){
+        const maoIA = gameState.maoEles;
+        let forcaMao = maoIA.reduce((acc, c) => acc + getForcaCarta(c), 0);
+        
+        let chanceAceitar = 0;
+        switch(gameState.iaDificuldade) {
+            case 'facil':
+                chanceAceitar = 0.9; // Quase sempre aceita
+                break;
+            case 'medio':
+                if(forcaMao > 10) chanceAceitar = 0.7;
+                if(forcaMao > 100) chanceAceitar = 0.95;
+                break;
+            case 'dificil':
+                if(forcaMao > 5) chanceAceitar = 0.6; // Aceita mais pra blefar
+                if(forcaMao > 105) chanceAceitar = 1;
+                // Lógica pra aumentar
+                if(forcaMao > 205 && gameState.valorDaMao === 3) {
+                     responderTruco('aumentar');
+                     return;
+                }
+                break;
+        }
+
+        if(Math.random() < chanceAceitar) {
+            responderTruco('aceitar');
+        } else {
+            responderTruco('correr');
+        }
+    }
+
+
+    // --- ATUALIZAÇÃO DA INTERFACE (UI) ---
+    function atualizarUI() {
+        const meuID = (gameState.gameMode === 'p2p' && !souHost) ? 'eles' : 'nos';
+        const oponenteID = meuID === 'nos' ? 'eles' : 'nos';
+
+        // Placar
+        document.getElementById('placar-nos').textContent = gameState.placarNos;
+        document.getElementById('placar-eles').textContent = gameState.placarEles;
+        
+        // Rodada Info
+        let rodadaInfoTxt = `Mão valendo ${gameState.valorDaMao} ponto(s). Rodada ${gameState.rodadaAtual}.`;
+        rodadaInfoTxt += ` (Você ${gameState.placarRodada[meuID]} x ${gameState.placarRodada[oponenteID]} Oponente)`;
+        document.getElementById('rodada-info').textContent = rodadaInfoTxt;
+
+        // Vira
+        document.getElementById('area-vira').innerHTML = '';
+        if (gameState.vira) {
+            document.getElementById('area-vira').appendChild(criarElementoCarta(gameState.vira, false));
+        }
+
+        // Minha mão
+        const minhaMaoEl = document.getElementById('area-jogador');
+        minhaMaoEl.innerHTML = '';
+        const minhaMao = gameState[meuID];
+        minhaMao.forEach((carta, index) => {
+            const cartaEl = criarElementoCarta(carta, true, index);
+            minhaMaoEl.appendChild(cartaEl);
+        });
+        
+        // Mão do Oponente (cartas viradas)
+        const oponenteMaoEl = document.getElementById('area-oponente');
+        oponenteMaoEl.innerHTML = '';
+        const oponenteMao = gameState[oponenteID];
+        oponenteMao.forEach(() => {
+            const cartaVirada = document.createElement('div');
+            cartaVirada.classList.add('carta-virada-oponente');
+            oponenteMaoEl.appendChild(cartaVirada);
+        });
+
+        // Cartas na mesa
+        const mesaJogadorEl = document.getElementById('mesa-jogador');
+        const mesaOponenteEl = document.getElementById('mesa-oponente');
+        mesaJogadorEl.innerHTML = '<div class="carta-placeholder">Você</div>';
+        mesaOponenteEl.innerHTML = '<div class="carta-placeholder">Oponente</div>';
+        
+        if (gameState.cartasJogadasNos[gameState.rodadaAtual-1]) {
+             const cartaNaMesa = meuID === 'nos' ? gameState.cartasJogadasNos[gameState.rodadaAtual-1] : gameState.cartasJogadasEles[gameState.rodadaAtual-1];
+             mesaJogadorEl.innerHTML = '';
+             mesaJogadorEl.appendChild(criarElementoCarta(cartaNaMesa, false));
+        }
+        if (gameState.cartasJogadasEles[gameState.rodadaAtual-1]) {
+             const cartaNaMesa = meuID === 'eles' ? gameState.cartasJogadasNos[gameState.rodadaAtual-1] : gameState.cartasJogadasEles[gameState.rodadaAtual-1];
+             mesaOponenteEl.innerHTML = '';
+             mesaOponenteEl.appendChild(criarElementoCarta(cartaNaMesa, false));
+        }
+
+        // Mensagens e Turno
+        if (gameState.turnoDe === meuID) {
+            if(gameState.estadoTruco === 'pendente'){
+                 mensagemEl.textContent = "Oponente pediu TRUCO! E agora?";
+            } else {
+                 mensagemEl.textContent = "É a sua vez de jogar!";
+            }
+        } else {
+            mensagemEl.textContent = "Aguardando oponente...";
+        }
+
+        // Botões de Ação
+        const botoesAcaoEl = document.getElementById('botoes-acao');
+        botoesAcaoEl.innerHTML = '';
+
+        if (gameState.estadoTruco === 'pendente' && gameState.turnoDe === meuID) {
+             // Botões de resposta ao Truco
+            botoesAcaoEl.innerHTML += `<button id="btn-aceitar-truco">Aceitar (${gameState.valorDaMao} Pts)</button>`;
+            botoesAcaoEl.innerHTML += `<button id="btn-correr-truco">Correr</button>`;
+            if (gameState.valorDaMao < 12) {
+                botoesAcaoEl.innerHTML += `<button id="btn-aumentar-truco">Pedir ${gameState.valorDaMao + 3}!</button>`;
+            }
+            document.getElementById('btn-aceitar-truco').onclick = () => responderTruco('aceitar');
+            document.getElementById('btn-correr-truco').onclick = () => responderTruco('correr');
+            if(document.getElementById('btn-aumentar-truco')) {
+                document.getElementById('btn-aumentar-truco').onclick = () => responderTruco('aumentar');
+            }
+
+        } else if (gameState.turnoDe === meuID) {
+            // Botão de Pedir Truco
+            if(!gameState.maoDeOnze) {
+                const btnTruco = document.createElement('button');
+                btnTruco.textContent = gameState.valorDaMao === 1 ? 'TRUCO!' : `PEDIR ${gameState.valorDaMao + 3}!`;
+                btnTruco.disabled = gameState.quemPediuTruco === meuID; // Não pode pedir truco 2x seguidas
+                btnTruco.onclick = pedirTruco;
+                botoesAcaoEl.appendChild(btnTruco);
+            }
+        }
+    }
+
+    function criarElementoCarta(carta, isJogador, index = -1) {
+        const cartaEl = document.createElement('div');
+        cartaEl.classList.add('carta');
+        if (isJogador) cartaEl.classList.add('carta-jogador');
+        if (carta.valor === gameState.manilha) cartaEl.classList.add('manilha');
+
+        cartaEl.innerHTML = `<div class="valor">${carta.valor}</div><div class="naipe">${carta.naipe}</div>`;
+        if (isJogador) {
+            cartaEl.onclick = () => jogadorJogouCarta(index);
+        }
+        return cartaEl;
+    }
+
     </script>
 </body>
 </html>
