@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Truco Online</title>
-    <!-- O script do socket.io será servido automaticamente pelo nosso servidor -->
-    <script src="/socket.io/socket.io.js"></script>
+    <title>Truco P2P (Host/Cliente)</title>
+    <!-- 1. Importando a biblioteca PeerJS de um CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peer.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #0d47a1; color: white; text-align: center; padding-top: 20px; }
+        body { font-family: Arial, sans-serif; background-color: #0d47a1; color: white; text-align: center; padding: 20px; }
         .container { max-width: 800px; margin: 0 auto; }
         .placar { display: flex; justify-content: space-around; font-size: 24px; margin-bottom: 20px; }
         .mesa { background-color: #00695c; border: 5px solid #004d40; border-radius: 10px; padding: 20px; margin: 20px 0; min-height: 250px; display: flex; justify-content: space-around; align-items: center; }
-        .area-cartas { display: flex; gap: 10px; }
+        .area-cartas { display: flex; gap: 10px; justify-content: center; }
         .carta { width: 80px; height: 120px; background-color: white; border: 1px solid black; border-radius: 5px; position: relative; color: black; font-size: 24px; font-weight: bold; }
         .carta-jogador { cursor: pointer; transition: transform 0.2s; }
         .carta-jogador:hover { transform: translateY(-10px); }
@@ -21,25 +21,31 @@
         .carta-placeholder { width: 80px; height: 120px; background-color: rgba(0,0,0,0.2); border: 2px dashed #FFF; border-radius: 5px; }
         .carta-virada-oponente { width: 80px; height: 120px; background-color: #B71C1C; border-radius: 5px; }
         .botoes button, .login-area button, .login-area input { padding: 10px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; margin: 5px; }
-        .botoes button { background-color: #ffc107; color: black; }
-        #game-area { display: none; } /* Escondido por padrão */
+        #game-area { display: none; }
         #login-area { background-color: #004d40; padding: 20px; border-radius: 10px; }
+        #meu-id-display { font-size: 1.2em; background: #FFF; color: #000; padding: 5px 10px; border-radius: 5px; user-select: all; cursor: pointer; }
+        #status { min-height: 25px; margin-top: 15px; font-size: 1.1em; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Truco Online</h1>
+        <h1>Truco P2P (sem servidor)</h1>
 
         <div id="login-area">
-            <h3>Bem-vindo!</h3>
-            <button id="btn-criar">Criar Nova Sala</button>
+            <h3>Conexão P2P</h3>
+            <button id="btn-criar">1. Criar Jogo (Ser o Host)</button>
+            <div id="host-info" style="display:none; margin-top:15px;">
+                <p>Envie este ID para seu amigo:</p>
+                <code id="meu-id-display"></code>
+            </div>
             <hr>
-            <input type="text" id="input-sala" placeholder="Cole o código da sala aqui">
-            <button id="btn-entrar">Entrar na Sala</button>
-            <div id="room-code-display"></div>
+            <input type="text" id="input-oponente-id" placeholder="2. Cole o ID do Host aqui">
+            <button id="btn-entrar">Entrar no Jogo</button>
+            <div id="status">Aguardando conexão...</div>
         </div>
 
         <div id="game-area">
+            <!-- Estrutura do jogo (placar, mesa, cartas) igual à anterior -->
             <div class="placar">
                 <div>Você: <span id="placar-nos">0</span></div>
                 <div>Oponente: <span id="placar-eles">0</span></div>
@@ -58,103 +64,184 @@
             
             <div class="botoes">
                 <button id="btn-truco">TRUCO!</button>
+                <button id="btn-nova-mao">Nova Mão (Apenas Host)</button>
             </div>
             <div id="mensagem" style="margin-top: 15px; font-size: 1.2em; min-height: 25px;"></div>
         </div>
     </div>
 
     <script>
-        const socket = io();
-
-        // Elementos da UI
+        // --- Elementos da UI ---
         const loginArea = document.getElementById('login-area');
         const gameArea = document.getElementById('game-area');
         const btnCriar = document.getElementById('btn-criar');
         const btnEntrar = document.getElementById('btn-entrar');
-        const inputSala = document.getElementById('input-sala');
-        const roomCodeDisplay = document.getElementById('room-code-display');
+        const meuIdDisplay = document.getElementById('meu-id-display');
+        const hostInfo = document.getElementById('host-info');
+        const inputOponenteId = document.getElementById('input-oponente-id');
+        const statusEl = document.getElementById('status');
         const mensagemEl = document.getElementById('mensagem');
         const areaJogadorEl = document.getElementById('area-jogador');
-        const areaOponenteEl = document.getElementById('area-oponente');
-        const areaViraEl = document.getElementById('area-vira');
-        const mesaJogadorEl = document.getElementById('mesa-jogador');
-        const mesaOponenteEl = document.getElementById('mesa-oponente');
-        const btnTruco = document.getElementById('btn-truco');
+        // ... (outros elementos da UI do jogo)
 
-        let meuId = '';
-        let roomId = '';
+        // --- Variáveis de Conexão e Jogo ---
+        let peer;
+        let conn; // A conexão de dados
+        let meuId;
+        let souHost = false;
         let minhaMao = [];
         let manilhaValor = '';
 
-        // --- Lógica de Conexão ---
+        function inicializarPeer() {
+            // Conecta ao servidor de sinalização público do PeerJS
+            peer = new Peer(); 
+
+            // Evento disparado quando obtemos nosso ID
+            peer.on('open', (id) => {
+                meuId = id;
+                console.log('Meu ID de peer é: ' + id);
+                statusEl.textContent = 'Pronto para criar ou entrar em um jogo.';
+            });
+
+            // Evento disparado quando um cliente tenta se conectar (só para o host)
+            peer.on('connection', (newConn) => {
+                if (conn) { // Se já temos uma conexão, recusamos a nova
+                    newConn.close();
+                    return;
+                }
+                conn = newConn;
+                souHost = true;
+                iniciarConexao();
+            });
+
+            peer.on('error', (err) => {
+                alert('Ocorreu um erro com a conexão P2P: ' + err.message);
+                console.error(err);
+            });
+        }
+        
         btnCriar.addEventListener('click', () => {
-            socket.emit('criarSala');
+            if (!meuId) {
+                alert('Aguardando ID de conexão, tente novamente em um segundo.');
+                return;
+            }
+            souHost = true;
+            meuIdDisplay.textContent = meuId;
+            hostInfo.style.display = 'block';
+            statusEl.textContent = 'Aguardando oponente se conectar...';
+            btnCriar.disabled = true;
+            btnEntrar.disabled = true;
+            inputOponenteId.disabled = true;
         });
 
         btnEntrar.addEventListener('click', () => {
-            const code = inputSala.value.trim();
-            if (code) {
-                socket.emit('entrarNaSala', code);
+            const oponenteId = inputOponenteId.value.trim();
+            if (!oponenteId) {
+                alert('Por favor, insira o ID do Host.');
+                return;
             }
-        });
-        
-        btnTruco.addEventListener('click', () => {
-            socket.emit('pedirTruco', roomId);
+            conn = peer.connect(oponenteId);
+            iniciarConexao();
         });
 
-        // --- Ouvindo Eventos do Servidor ---
-        socket.on('connect', () => {
-            meuId = socket.id;
-        });
-        
-        socket.on('salaCriada', (newRoomId) => {
-            roomId = newRoomId;
-            loginArea.innerHTML = `<h3>Sala Criada!</h3><p>Envie este código para seu amigo:</p><strong style="font-size: 1.5em; background: #FFF; color: #000; padding: 5px 10px; border-radius: 5px;">${roomId}</strong><p>Aguardando oponente...</p>`;
+        function iniciarConexao() {
+            if (!conn) return;
+
+            conn.on('open', () => {
+                console.log('Conexão estabelecida!');
+                statusEl.textContent = 'Conectado!';
+                loginArea.style.display = 'none';
+                gameArea.style.display = 'block';
+
+                if (souHost) {
+                    // O Host é responsável por iniciar a primeira mão
+                    document.getElementById('btn-nova-mao').style.display = 'inline-block';
+                    iniciarNovaMao();
+                } else {
+                    document.getElementById('btn-nova-mao').style.display = 'none';
+                    mensagemEl.textContent = 'Conectado! Aguardando o Host iniciar a mão.';
+                }
+            });
+
+            // Onde a mágica acontece: recebendo dados
+            conn.on('data', (data) => {
+                console.log('Dado recebido:', data);
+                // Aqui vamos processar todos os tipos de mensagens
+                if (data.type === 'mao') {
+                    minhaMao = data.mao;
+                    manilhaValor = data.gameState.manilha;
+                    desenharMao(minhaMao, manilhaValor);
+                    desenharVira(data.gameState.vira, manilhaValor);
+                    desenharMaoOponente(minhaMao.length);
+                    mensagemEl.textContent = 'Sua vez de jogar!';
+                }
+                if (data.type === 'cartaJogada') {
+                    // Atualiza a mesa do oponente
+                    const cartaEl = criarElementoCarta(data.carta, manilhaValor);
+                    document.getElementById('mesa-oponente').innerHTML = '';
+                    document.getElementById('mesa-oponente').appendChild(cartaEl);
+                }
+            });
+            
+            conn.on('close', () => {
+                alert('O oponente desconectou.');
+                gameArea.style.display = 'none';
+                loginArea.style.display = 'block';
+            });
+        }
+
+        // Função para enviar qualquer tipo de dado para o oponente
+        function enviarDado(data) {
+            if (conn && conn.open) {
+                conn.send(data);
+            }
+        }
+
+        // --- LÓGICA DO JOGO (Adaptada para P2P) ---
+
+        document.getElementById('btn-nova-mao').addEventListener('click', () => {
+            if(souHost) iniciarNovaMao();
         });
 
-        socket.on('partidaIniciada', () => {
-            loginArea.style.display = 'none';
-            gameArea.style.display = 'block';
-        });
+        function iniciarNovaMao() {
+            if (!souHost) return; // Apenas o host pode iniciar uma mão
 
-        socket.on('maoRecebida', ({ mao, gameState }) => {
-            minhaMao = mao;
+            const naipes = ['♦', '♠', '♥', '♣'];
+            const valores = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
+            let baralho = [];
+            for (const naipe of naipes) {
+                for (const valor of valores) {
+                    baralho.push({ valor, naipe });
+                }
+            }
+            // Embaralhar...
+            for (let i = baralho.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [baralho[i], baralho[j]] = [baralho[j], baralho[i]];
+            }
+
+            const vira = baralho[6];
+            const viraIndex = valores.indexOf(vira.valor);
+            const manilha = viraIndex === valores.length - 1 ? valores[0] : valores[viraIndex + 1];
+
+            const maoHost = baralho.slice(0, 3);
+            const maoCliente = baralho.slice(3, 6);
+
+            const gameState = { vira: vira, manilha: manilha };
+
+            // O Host configura sua própria tela
+            minhaMao = maoHost;
             manilhaValor = gameState.manilha;
-            desenharMao(mao, gameState.manilha);
-            desenharVira(gameState.vira, gameState.manilha);
-            desenharMaoOponente(mao.length);
-            mensagemEl.textContent = gameState.turno === meuId ? 'Sua vez de jogar!' : 'Vez do oponente.';
-        });
+            desenharMao(minhaMao, manilhaValor);
+            desenharVira(gameState.vira, manilhaValor);
+            desenharMaoOponente(maoCliente.length);
+            mensagemEl.textContent = 'Sua vez de jogar!';
+
+            // O Host envia a mão e o estado do jogo para o Cliente
+            enviarDado({ type: 'mao', mao: maoCliente, gameState: gameState });
+        }
         
-        socket.on('cartaJogada', ({ jogadorId, carta }) => {
-            const cartaEl = criarElementoCarta(carta, manilhaValor);
-            if (jogadorId === meuId) {
-                mesaJogadorEl.innerHTML = '';
-                mesaJogadorEl.appendChild(cartaEl);
-            } else {
-                mesaOponenteEl.innerHTML = '';
-                mesaOponenteEl.appendChild(cartaEl);
-            }
-        });
-
-        socket.on('trucoRecebido', ({ message }) => {
-            // Lógica para o jogador decidir se aceita, corre ou pede 6.
-            // Por simplicidade, apenas mostra a mensagem.
-            alert(message);
-        });
-
-        socket.on('erro', (msg) => {
-            alert(`Erro: ${msg}`);
-        });
-        
-        socket.on('oponenteDesconectou', () => {
-            alert('Seu oponente desconectou. O jogo acabou.');
-            gameArea.style.display = 'none';
-            loginArea.style.display = 'block';
-            loginArea.innerHTML = '<h3>Seu oponente saiu.</h3><p>Você pode criar ou entrar em outra sala.</p>';
-        });
-
-        // --- Funções de Desenho ---
+        // --- Funções de Desenho (praticamente inalteradas) ---
         function criarElementoCarta(carta, manilha, isJogador = false) {
             const cartaEl = document.createElement('div');
             cartaEl.classList.add('carta');
@@ -165,14 +252,16 @@
             
             if (isJogador) {
                 cartaEl.addEventListener('click', () => {
-                    // Remove a carta da mão localmente para resposta visual rápida
+                    // Atualiza a UI localmente
                     const index = minhaMao.findIndex(c => c.valor === carta.valor && c.naipe === carta.naipe);
                     if (index > -1) {
                         minhaMao.splice(index, 1);
-                        desenharMao(minhaMao, manilha); // Redesenha a mão sem a carta jogada
+                        desenharMao(minhaMao, manilha);
+                        document.getElementById('mesa-jogador').innerHTML = '';
+                        document.getElementById('mesa-jogador').appendChild(criarElementoCarta(carta, manilha));
                     }
-                    // Envia a jogada para o servidor
-                    socket.emit('jogarCarta', { roomId, carta });
+                    // Envia a jogada para o oponente
+                    enviarDado({ type: 'cartaJogada', carta: carta });
                 });
             }
             return cartaEl;
@@ -180,19 +269,16 @@
 
         function desenharMao(mao, manilha) {
             areaJogadorEl.innerHTML = '';
-            mao.forEach(carta => {
-                areaJogadorEl.appendChild(criarElementoCarta(carta, manilha, true));
-            });
+            mao.forEach(carta => areaJogadorEl.appendChild(criarElementoCarta(carta, manilha, true)));
         }
         
         function desenharVira(vira, manilha) {
-            areaViraEl.innerHTML = '';
-            const viraEl = criarElementoCarta(vira, manilha);
-            viraEl.style.marginTop = '20px';
-            areaViraEl.appendChild(viraEl);
+            document.getElementById('area-vira').innerHTML = '';
+            document.getElementById('area-vira').appendChild(criarElementoCarta(vira, manilha));
         }
         
         function desenharMaoOponente(numCartas) {
+            const areaOponenteEl = document.getElementById('area-oponente');
             areaOponenteEl.innerHTML = '';
             for(let i=0; i<numCartas; i++) {
                 const cartaVirada = document.createElement('div');
@@ -200,6 +286,9 @@
                 areaOponenteEl.appendChild(cartaVirada);
             }
         }
+        
+        // Inicia o processo de conexão ao carregar a página
+        inicializarPeer();
     </script>
 </body>
 </html>
