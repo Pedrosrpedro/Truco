@@ -1,16 +1,33 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- ELEMENTOS DO JOGO ---
     const playerHandDisplay = document.getElementById('human-player');
+    const cpuHands = {
+        cpu1: document.getElementById('cpu-player-1'),
+        cpu2: document.getElementById('cpu-player-2'),
+        cpu3: document.getElementById('cpu-player-3'),
+    };
     const viraDisplay = document.getElementById('vira');
     const newGameButton = document.getElementById('new-game-button');
     const playedCardsContainer = document.getElementById('played-cards-container');
+    const difficultySelector = document.getElementById('difficulty');
 
     // --- VARIÁVEIS DE ESTADO DO JOGO ---
     const suits = { '♦': 'red', '♠': 'black', '♥': 'red', '♣': 'black' };
     const ranks = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
     let deck = [];
-    let playerHand = [];
-    // ... (mãos dos outros jogadores e outras variáveis virão aqui)
+    let vira;
+    let manilhas = [];
+
+    let hands = {
+        player: [],
+        cpu1: [],
+        cpu2: [],
+        cpu3: [],
+    };
+
+    let turnOrder = ['player', 'cpu1', 'cpu2', 'cpu3']; // A ordem de quem joga
+    let currentTurnIndex = 0;
+    let playedCards = {}; // Guarda as cartas jogadas na rodada
 
     // --- FUNÇÕES DE LÓGICA DO JOGO ---
 
@@ -29,92 +46,185 @@ document.addEventListener('DOMContentLoaded', () => {
             [deck[i], deck[j]] = [deck[j], deck[i]];
         }
     }
-
-    function dealCards() {
-        // Por enquanto, vamos distribuir apenas para o jogador humano
-        playerHand = deck.splice(0, 3);
-        // Os outros 9 cartas seriam para os CPUs
-        deck.splice(0, 9); 
-        
-        const vira = deck.pop();
-        
-        updateUI(vira);
+    
+    function determineManilhas() {
+        const viraIndex = ranks.indexOf(vira.rank);
+        const manilhaRank = ranks[(viraIndex + 1) % ranks.length];
+        // A força da manilha é definida pela ordem dos naipes: Paus > Copas > Espadas > Ouros
+        manilhas = [
+            { rank: manilhaRank, suit: '♣' }, // Zap
+            { rank: manilhaRank, suit: '♥' }, // Copeta
+            { rank: manilhaRank, suit: '♠' }, // Espadilha
+            { rank: manilhaRank, suit: '♦' }  // Pica-fumo
+        ];
+        console.log("Vira:", vira.rank, "Manilhas são:", manilhaRank);
     }
 
-    // --- FUNÇÕES DE ATUALIZAÇÃO DA INTERFACE (UI) ---
+    function dealCards() {
+        hands.player = deck.splice(0, 3);
+        hands.cpu1 = deck.splice(0, 3);
+        hands.cpu2 = deck.splice(0, 3);
+        hands.cpu3 = deck.splice(0, 3);
+        
+        vira = deck.pop();
+        determineManilhas();
+        updateUI();
+    }
+    
+    function getCardValue(card) {
+        // Verifica se a carta é uma manilha
+        const manilhaIndex = manilhas.findIndex(m => m.rank === card.rank && m.suit === card.suit);
+        if (manilhaIndex !== -1) {
+            // Quanto menor o índice, mais forte a manilha (Zap=0, Pica-fumo=3)
+            return 20 - manilhaIndex; // Ex: Zap=20, Copeta=19, etc.
+        }
+        // Valor das cartas comuns
+        const rankIndex = ranks.indexOf(card.rank);
+        return rankIndex; // 3=9, 2=8, A=7, etc.
+    }
 
-    function createCardElement(card, index) {
-        if (!card) return document.createElement('div'); // Retorna div vazia se a carta for nula
+    // --- LÓGICA DA IA ---
 
-        const cardDiv = document.createElement('div');
-        cardDiv.className = `card ${card.color}`;
-        // Adiciona um 'data-index' para sabermos qual carta foi clicada
-        if (index !== undefined) {
-            cardDiv.dataset.index = index;
+    function getCPUPlay(hand, difficulty) {
+        // Nível Fácil: Joga a carta com o menor valor.
+        // Nível Médio/Difícil: (A ser melhorado) Joga a carta com maior valor.
+        let bestCard = hand[0];
+        let bestCardIndex = 0;
+
+        for (let i = 1; i < hand.length; i++) {
+            const currentCard = hand[i];
+            
+            if (difficulty === 'easy' && getCardValue(currentCard) < getCardValue(bestCard)) {
+                bestCard = currentCard;
+                bestCardIndex = i;
+            } else if (difficulty !== 'easy' && getCardValue(currentCard) > getCardValue(bestCard)) {
+                bestCard = currentCard;
+                bestCardIndex = i;
+            }
         }
         
+        // Remove a carta da mão e a retorna
+        return hand.splice(bestCardIndex, 1)[0];
+    }
+    
+    // --- FUNÇÕES DE ATUALIZAÇÃO DA INTERFACE (UI) ---
+
+    function createCardElement(card) {
+        if (!card) return document.createElement('div');
+        const cardDiv = document.createElement('div');
+        cardDiv.className = `card ${card.color}`;
         cardDiv.innerHTML = `<span class="value">${card.rank}</span><span class="suit">${card.suit}</span>`;
-        
-        // Adiciona o evento de clique diretamente aqui
-        cardDiv.addEventListener('click', handleCardClick);
-        
+        // Adiciona um objeto 'cardData' ao elemento para referência futura
+        cardDiv.cardData = card;
         return cardDiv;
     }
     
-    function updateUI(vira) {
-        // Limpa a mão do jogador e a mesa
+    function updateUI() {
         playerHandDisplay.innerHTML = '';
-        playedCardsContainer.innerHTML = '';
-        
-        // Mostra as cartas do jogador
-        playerHand.forEach((card, index) => {
-            playerHandDisplay.appendChild(createCardElement(card, index));
+        hands.player.forEach(card => {
+            const cardElement = createCardElement(card);
+            cardElement.addEventListener('click', handleCardClick);
+            playerHandDisplay.appendChild(cardElement);
         });
-        
-        // Mostra a carta Vira
+
+        // Limpa e exibe as cartas viradas dos oponentes
+        Object.keys(cpuHands).forEach(cpuId => {
+            const handDisplay = cpuHands[cpuId];
+            handDisplay.innerHTML = '';
+            for (let i = 0; i < hands[cpuId].length; i++) {
+                const cardBack = document.createElement('div');
+                cardBack.className = 'card back';
+                handDisplay.appendChild(cardBack);
+            }
+        });
+
         viraDisplay.innerHTML = createCardElement(vira).innerHTML;
-        viraDisplay.className = `card ${vira.color}`; // Garante que a cor da vira esteja correta
+        viraDisplay.className = `card ${vira.color}`;
     }
-    
-    // --- FUNÇÕES DE MANIPULAÇÃO DE EVENTOS ---
-    
+
+    // --- FUNÇÕES DE MANIPULAÇÃO DE JOGO E TURNOS ---
+
     function handleCardClick(event) {
-        // 'currentTarget' é o elemento .card que tem o listener
-        const cardDiv = event.currentTarget; 
-        const cardIndex = cardDiv.dataset.index;
+        if (turnOrder[currentTurnIndex] !== 'player') {
+            console.log("Não é a sua vez!");
+            return;
+        }
+
+        const cardDiv = event.currentTarget;
+        const playedCard = cardDiv.cardData;
         
-        if (cardIndex === undefined) return;
+        // Remove a carta da mão do jogador
+        const cardIndex = hands.player.findIndex(c => c.rank === playedCard.rank && c.suit === playedCard.suit);
+        hands.player.splice(cardIndex, 1);
 
-        const playedCard = playerHand[cardIndex];
-
-        console.log(`Jogador jogou: ${playedCard.rank} de ${playedCard.suit}`);
-
-        // Move a carta para a mesa
-        cardDiv.classList.add('played-card');
-        cardDiv.id = 'played-card-player';
-        playedCardsContainer.appendChild(cardDiv);
-
-        // Lógica da IA viria aqui
-        // Por enquanto, vamos simular uma jogada da IA depois de 1 segundo
-        setTimeout(() => {
-            alert("Vez da IA jogar!");
-            // Aqui você implementaria a lógica para a IA escolher e jogar uma carta.
-        }, 1000);
+        playCard(playedCard, 'player');
     }
 
+    function playCard(card, playerId) {
+        console.log(`${playerId} jogou: ${card.rank}${card.suit}`);
+        playedCards[playerId] = card;
+
+        const cardElement = createCardElement(card);
+        cardElement.classList.add('played-card');
+        // Define a posição da carta na mesa baseada em quem jogou
+        cardElement.id = `played-card-${playerId}`; 
+        playedCardsContainer.appendChild(cardElement);
+
+        // Atualiza a UI para remover a carta da mão visualmente
+        updateUI();
+
+        processNextTurn();
+    }
+    
+    function processNextTurn() {
+        currentTurnIndex++;
+        if (currentTurnIndex >= turnOrder.length) {
+            console.log("Fim da rodada!");
+            // Lógica para determinar o vencedor da rodada viria aqui
+            currentTurnIndex = 0;
+            playedCards = {};
+            // Apenas para demonstração, vamos limpar a mesa após 2 segundos
+            setTimeout(() => {
+                playedCardsContainer.innerHTML = '';
+                alert("Rodada terminada. Próxima rodada!");
+            }, 2000);
+            return;
+        }
+
+        const currentPlayerId = turnOrder[currentTurnIndex];
+        if (currentPlayerId !== 'player') {
+            // É a vez de uma IA
+            setTimeout(() => playAITurn(currentPlayerId), 1000); // Delay para parecer que a IA "pensa"
+        }
+    }
+
+    function playAITurn(playerId) {
+        const difficulty = difficultySelector.value;
+        const hand = hands[playerId];
+        const cardToPlay = getCPUPlay(hand, difficulty);
+        playCard(cardToPlay, playerId);
+    }
+    
     function startNewGame() {
         console.log("Iniciando novo jogo...");
+        currentTurnIndex = 0;
+        playedCards = {};
+        playedCardsContainer.innerHTML = '';
+
         createDeck();
         shuffleDeck();
         dealCards();
-        // Resetar placares e outros estados de jogo viria aqui
+        
         document.getElementById('player-score').textContent = '0';
         document.getElementById('cpu-score').textContent = '0';
+
+        // Verifica se o primeiro a jogar é uma IA
+        if(turnOrder[currentTurnIndex] !== 'player') {
+            processNextTurn();
+        }
     }
 
     // --- INICIALIZAÇÃO DO JOGO ---
     newGameButton.addEventListener('click', startNewGame);
-    
-    // Inicia o primeiro jogo assim que a página carrega
     startNewGame();
 });
