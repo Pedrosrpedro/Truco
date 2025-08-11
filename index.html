@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Truco com IA e P2P</title>
+    <title>Truco com IA e P2P (Corrigido)</title>
     <!-- 1. Importando a biblioteca PeerJS de um CDN -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peer.min.js"></script>
     <style>
@@ -12,7 +12,7 @@
         h1 { color: #bbdefb; }
         .placar { display: flex; justify-content: space-around; font-size: 28px; margin-bottom: 20px; font-weight: bold; }
         .mesa { background-color: #00695c; border: 5px solid #004d40; border-radius: 10px; padding: 20px; margin: 20px 0; min-height: 270px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; gap: 20px; }
-        .area-cartas { display: flex; gap: 10px; justify-content: center; align-items: center; }
+        .area-cartas { display: flex; gap: 10px; justify-content: center; align-items: center; min-height: 130px; }
         .carta { width: 80px; height: 120px; background-color: white; border: 2px solid black; border-radius: 8px; position: relative; color: black; font-size: 24px; font-weight: bold; display: flex; flex-direction: column; justify-content: space-between; padding: 5px; box-shadow: 3px 3px 5px rgba(0,0,0,0.3); }
         .carta-jogador { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
         .carta-jogador:hover { transform: translateY(-15px); box-shadow: 0 10px 15px rgba(0,0,0,0.4); }
@@ -33,7 +33,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Truco P2P & IA</h1>
+        <h1>Truco P2P & IA (Corrigido)</h1>
 
         <div id="mode-selection" class="area-setup">
             <h2>Escolha o Modo de Jogo</h2>
@@ -136,12 +136,9 @@
 
     // --- LÓGICA DE CONEXÃO P2P ---
     function inicializarPeer() {
-        // Usando um servidor de sinalização público conhecido por ser mais estável
-        peer = new Peer(undefined, {
-            host: 'peerjs.92k.de',
-            port: 443,
-            path: '/'
-        });
+        // CORREÇÃO 1: Simplificando a inicialização do PeerJS.
+        // Removida a configuração de servidor customizado para usar o servidor de nuvem padrão do PeerJS, que é mais estável.
+        peer = new Peer();
 
         peer.on('open', id => {
             meuId = id;
@@ -184,10 +181,11 @@
         conn.on('open', () => {
             p2pSetup.style.display = 'none';
             gameScreen.style.display = 'block';
-            gameState = criarEstadoInicial();
-            gameState.gameMode = 'p2p';
-
+            
+            // O host é quem inicia o estado do jogo e a primeira mão
             if (souHost) {
+                gameState = criarEstadoInicial();
+                gameState.gameMode = 'p2p';
                 iniciarNovaMao();
             } else {
                 mensagemEl.textContent = 'Conectado! Aguardando o Host iniciar.';
@@ -232,14 +230,15 @@
             vira: null,
             manilha: null,
             baralho: [],
-            turnoDe: souHost ? 'nos' : 'eles',
+            // No P2P, o host sempre começa. No modo IA, o jogador humano começa.
+            turnoDe: souHost || gameState.gameMode === 'ia' ? 'nos' : 'eles', 
+            vencedorUltimaMao: souHost || gameState.gameMode === 'ia' ? 'nos' : 'eles',
             rodadaAtual: 1,
             placarRodada: { nos: 0, eles: 0 },
             valorDaMao: 1,
             quemPediuTruco: null,
-            estadoTruco: null, // 'pendente'
+            estadoTruco: null,
             maoDeOnze: false,
-            vencedorMao: null,
         };
     }
     
@@ -252,7 +251,6 @@
                 baralho.push({ valor, naipe });
             }
         }
-        // Embaralhar
         for (let i = baralho.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [baralho[i], baralho[j]] = [baralho[j], baralho[i]];
@@ -261,10 +259,8 @@
     }
 
     function iniciarNovaMao() {
-        // Apenas o Host (ou o jogo no modo IA) pode iniciar uma mão
         if (gameState.gameMode === 'p2p' && !souHost) return;
 
-        // Resetar estado da mão
         gameState.baralho = criarBaralho();
         gameState.vira = gameState.baralho.pop();
         const viraIndex = Object.keys(FORCA_CARTAS).indexOf(gameState.vira.valor);
@@ -281,9 +277,7 @@
         gameState.valorDaMao = 1;
         gameState.quemPediuTruco = null;
         gameState.estadoTruco = null;
-        gameState.vencedorMao = null;
-
-        // Lógica da Mão de Onze
+        
         if (gameState.placarNos === 11 || gameState.placarEles === 11) {
             gameState.maoDeOnze = true;
             gameState.valorDaMao = 3;
@@ -291,13 +285,8 @@
             gameState.maoDeOnze = false;
         }
         
-        // Determina quem começa a próxima mão (quem ganhou a anterior)
-        if (gameState.vencedorUltimaMao) {
-            gameState.turnoDe = gameState.vencedorUltimaMao;
-        } else {
-            // Alterna o início se não houver vencedor (ou no começo do jogo)
-            gameState.turnoDe = gameState.turnoDe === 'nos' ? 'eles' : 'nos';
-        }
+        // Quem ganhou a mão anterior começa a próxima
+        gameState.turnoDe = gameState.vencedorUltimaMao;
         
         if (gameState.gameMode === 'p2p') {
             enviarEstadoJogo();
@@ -310,7 +299,7 @@
     function getForcaCarta(carta) {
         let forca = FORCA_CARTAS[carta.valor];
         if (carta.valor === gameState.manilha) {
-            forca = 100 + NAIPES_FORCA[carta.naipe]; // Manilhas são mais fortes que qualquer outra
+            forca = 100 + NAIPES_FORCA[carta.naipe];
         }
         return forca;
     }
@@ -320,6 +309,7 @@
         if (gameState.turnoDe !== meuID || gameState.estadoTruco === 'pendente') return;
 
         const mao = meuID === 'nos' ? gameState.maoNos : gameState.maoEles;
+        if (!mao[index]) return; // Previne erro de carta já jogada
         const cartaJogada = mao.splice(index, 1)[0];
         
         if (meuID === 'nos') {
@@ -328,10 +318,8 @@
             gameState.cartasJogadasEles.push(cartaJogada);
         }
 
-        // Alterna o turno
         gameState.turnoDe = (meuID === 'nos') ? 'eles' : 'nos';
 
-        // Verifica se a rodada terminou
         if (gameState.cartasJogadasNos.length === gameState.cartasJogadasEles.length) {
             setTimeout(avaliarRodada, 1000);
         } else {
@@ -349,6 +337,7 @@
         const forcaNos = getForcaCarta(cartaNos);
         const forcaEles = getForcaCarta(cartaEles);
         let vencedorRodada;
+        let primeiroVencedorNaMao = gameState.primeiroVencedor;
 
         if (forcaNos > forcaEles) {
             vencedorRodada = 'nos';
@@ -358,43 +347,43 @@
             gameState.placarRodada.eles++;
         } else {
             vencedorRodada = 'empate';
-            gameState.placarRodada.nos++;
-            gameState.placarRodada.eles++;
+            if (gameState.rodadaAtual === 1) { // Empate na primeira rodada (canto)
+                // Ninguém ganha o ponto, mas a rodada conta
+            } else {
+                gameState.placarRodada.nos++;
+                gameState.placarRodada.eles++;
+            }
         }
-
-        // Quem ganhou a rodada, começa a próxima
-        gameState.turnoDe = vencedorRodada === 'empate' ? 'ninguem' : vencedorRodada;
-
-        // Checar se a mão terminou
-        let vencedorMao = null;
-        if (gameState.placarRodada.nos >= 2 && gameState.placarRodada.nos > gameState.placarRodada.eles) {
-            vencedorMao = 'nos';
-        } else if (gameState.placarRodada.eles >= 2 && gameState.placarRodada.eles > gameState.placarRodada.nos) {
-            vencedorMao = 'eles';
-        } else if (gameState.rodadaAtual === 1 && vencedorRodada === 'empate') {
-           // A regra do truco diz que quem ganhar a segunda, ganha a mão.
-        } else if (gameState.rodadaAtual === 2 && vencedorRodada === 'empate') {
-            // Se a primeira foi vencida por X e a segunda empatou, X ganha.
-            if(gameState.primeiroVencedor === 'nos') vencedorMao = 'nos';
-            if(gameState.primeiroVencedor === 'eles') vencedorMao = 'eles';
-        }
-
-        if(vencedorRodada !== 'empate' && gameState.rodadaAtual === 1) {
+        
+        if(gameState.rodadaAtual === 1 && vencedorRodada !== 'empate') {
             gameState.primeiroVencedor = vencedorRodada;
         }
 
-        if (gameState.rodadaAtual === 3 || vencedorMao) {
-            if (!vencedorMao) { // Decide na terceira rodada
+        let vencedorMao = null;
+        if (gameState.placarRodada.nos >= 2) vencedorMao = 'nos';
+        if (gameState.placarRodada.eles >= 2) vencedorMao = 'eles';
+        
+        // Regra de empate:
+        // Se a primeira empatou, quem vencer a segunda ganha.
+        if(gameState.rodadaAtual === 2 && primeiroVencedorNaMao === 'empate') {
+            if(vencedorRodada !== 'empate') vencedorMao = vencedorRodada;
+        }
+        // Se a segunda empatou, quem ganhou a primeira ganha.
+        if (gameState.rodadaAtual === 2 && vencedorRodada === 'empate') {
+             if(primeiroVencedorNaMao !== 'empate') vencedorMao = primeiroVencedorNaMao;
+        }
+       
+        gameState.turnoDe = vencedorRodada === 'empate' ? gameState.primeiroVencedor : vencedorRodada;
+
+        if (gameState.rodadaAtual >= 3 || vencedorMao) {
+            if (!vencedorMao) {
                  if (gameState.placarRodada.nos > gameState.placarRodada.eles) vencedorMao = 'nos';
                  else if (gameState.placarRodada.eles > gameState.placarRodada.nos) vencedorMao = 'eles';
-                 else vencedorMao = 'ninguem'; // Empate em tudo
+                 else vencedorMao = primeiroVencedorNaMao; // Se tudo empatou, quem levou a primeira leva
             }
             finalizarMao(vencedorMao);
         } else {
             gameState.rodadaAtual++;
-            if (gameState.turnoDe === 'ninguem') { // Se empatou, quem jogou a mão anterior começa
-                gameState.turnoDe = gameState.primeiroVencedor === 'nos' ? 'eles' : 'nos';
-            }
             if (gameState.gameMode === 'p2p') enviarEstadoJogo();
             atualizarUI();
             verificarTurnoIA();
@@ -402,20 +391,20 @@
     }
     
     function finalizarMao(vencedor) {
-        if (vencedor !== 'ninguem') {
+        if (vencedor !== 'ninguem' && vencedor !== 'empate') {
             gameState[vencedor === 'nos' ? 'placarNos' : 'placarEles'] += gameState.valorDaMao;
             gameState.vencedorUltimaMao = vencedor;
         } else {
-            gameState.vencedorUltimaMao = null; // Ninguém ganhou, ninguém começa
+            // Se empatou tudo, a regra é ninguém pontuar e quem distribuiu as cartas da mão anterior, distribui de novo.
+            // A variável `vencedorUltimaMao` não muda.
         }
         
-        mensagemEl.textContent = vencedor === 'ninguem' ? `Mão empatada!` : `Ponto para ${vencedor === 'nos' ? 'você' : 'o oponente'}!`;
+        mensagemEl.textContent = (!vencedor || vencedor === 'ninguem' || vencedor === 'empate') ? `Mão empatada!` : `Ponto para ${vencedor === 'nos' ? 'você' : 'o oponente'}!`;
 
         if (gameState.placarNos >= 12 || gameState.placarEles >= 12) {
-            // Fim de jogo
             const ganhadorFinal = gameState.placarNos >= 12 ? 'Você' : 'Oponente';
             mensagemEl.textContent = `FIM DE JOGO! ${ganhadorFinal} venceu!`;
-            // Travar tudo
+            // Trava tudo
         } else {
              setTimeout(() => {
                 iniciarNovaMao();
@@ -437,7 +426,7 @@
         else if (gameState.valorDaMao === 3) novoValor = 6;
         else if (gameState.valorDaMao === 6) novoValor = 9;
         else if (gameState.valorDaMao === 9) novoValor = 12;
-        else return; // Não pode aumentar mais
+        else return; 
 
         gameState.valorDaMao = novoValor;
         gameState.estadoTruco = 'pendente';
@@ -451,16 +440,15 @@
 
     function responderTruco(resposta) {
         if (resposta === 'aceitar') {
-            gameState.estadoTruco = null; // Jogo continua valendo mais
-            // Quem aceitou começa a jogar
+            gameState.estadoTruco = null; 
             gameState.turnoDe = gameState.quemPediuTruco === 'nos' ? 'eles' : 'nos';
         } else if (resposta === 'correr') {
             const vencedor = gameState.quemPediuTruco;
-            const valorAntesDoTruco = gameState.valorDaMao === 3 ? 1 : (gameState.valorDaMao / 3) * 3 - 3;
-            gameState.valorDaMao = valorAntesDoTruco;
+            gameState.valorDaMao = gameState.valorDaMao === 3 ? 1 : (gameState.valorDaMao / 3) * 3 - 3;
             finalizarMao(vencedor);
+            return; // Evita a atualização dupla da UI
         } else if (resposta === 'aumentar') {
-            pedirTruco(); // Inverte o pedido
+            pedirTruco(); 
             return;
         }
 
@@ -471,21 +459,33 @@
 
     // --- INTELIGÊNCIA ARTIFICIAL ---
     function verificarTurnoIA() {
-        if (gameState.gameMode === 'ia' && gameState.turnoDe === 'eles') {
-            setTimeout(jogadaIA, 1500); // Dar um tempo para IA "pensar"
+        if (gameState.gameMode === 'ia' && gameState.turnoDe === 'eles' && !vencedorMao) {
+            setTimeout(jogadaIA, 1500);
         }
     }
-
+    
+    // CORREÇÃO 2: Lógica da IA foi reescrita para não usar `jogadorJogouCarta` e manipular o estado corretamente.
     function jogadaIA() {
-        if(gameState.estadoTruco === 'pendente') {
+        // Se a mão já acabou, não faz nada
+        if (gameState.vencedorMao) return;
+
+        // Se a IA precisa responder a um truco
+        if(gameState.estadoTruco === 'pendente' && gameState.turnoDe === 'eles') {
             decidirRespostaTrucoIA();
-        } else {
+            return;
+        }
+
+        // Se é a vez da IA jogar uma carta
+        if(gameState.turnoDe === 'eles') {
             decidirJogadaIA();
         }
     }
 
+
     function decidirJogadaIA() {
         const maoIA = gameState.maoEles;
+        if(maoIA.length === 0) return; // Se a IA não tem mais cartas
+
         let melhorCartaIndex = 0;
         let piorCartaIndex = 0;
         for (let i = 1; i < maoIA.length; i++) {
@@ -495,12 +495,11 @@
         
         let forcaMao = maoIA.reduce((acc, c) => acc + getForcaCarta(c), 0);
         
-        // Decidir se pede truco
         if (gameState.valorDaMao === 1 && !gameState.estadoTruco) {
             let chanceTruco = 0;
             if(gameState.iaDificuldade === 'medio' && forcaMao > 110) chanceTruco = 0.5;
-            if(gameState.iaDificuldade === 'dificil' && forcaMao > 15) chanceTruco = 0.7; // Blefa mais
-            if(forcaMao > 200) chanceTruco = 0.9; // Quase certeza
+            if(gameState.iaDificuldade === 'dificil' && forcaMao > 15) chanceTruco = 0.7;
+            if(forcaMao > 200) chanceTruco = 0.9;
 
             if (Math.random() < chanceTruco) {
                 pedirTruco();
@@ -514,18 +513,13 @@
                 indexEscolhido = Math.floor(Math.random() * maoIA.length);
                 break;
             case 'medio':
-                // Joga a pior carta se for o primeiro a jogar na rodada
                  indexEscolhido = (gameState.cartasJogadasNos.length === gameState.cartasJogadasEles.length) ? piorCartaIndex : melhorCartaIndex;
                 break;
             case 'dificil':
-                 // Estratégia mais avançada
                  if (gameState.cartasJogadasNos.length > gameState.cartasJogadasEles.length) {
-                    // O jogador já jogou, IA precisa responder
                     const cartaJogador = gameState.cartasJogadasNos[gameState.rodadaAtual - 1];
-                    // Tenta ganhar com a carta mais fraca possível
                     let melhorOpcaoParaGanhar = -1;
                     let menorForcaParaGanhar = Infinity;
-
                     for(let i = 0; i < maoIA.length; i++) {
                         if(getForcaCarta(maoIA[i]) > getForcaCarta(cartaJogador)) {
                             if(getForcaCarta(maoIA[i]) < menorForcaParaGanhar) {
@@ -534,17 +528,24 @@
                             }
                         }
                     }
-                    // Se pode ganhar, joga a mais fraca que ganha. Senão, joga a pior de todas.
                     indexEscolhido = (melhorOpcaoParaGanhar !== -1) ? melhorOpcaoParaGanhar : piorCartaIndex;
                  } else {
-                     // IA é a primeira a jogar na rodada
-                     // Se já ganhou uma, joga a mais forte pra tentar fechar
                      if(gameState.placarRodada.eles === 1) indexEscolhido = melhorCartaIndex;
-                     else indexEscolhido = piorCartaIndex; // Senão, começa com a pior
+                     else indexEscolhido = piorCartaIndex;
                  }
                 break;
         }
-        jogadorJogouCarta(indexEscolhido);
+
+        // Lógica de jogar a carta movida para cá
+        const cartaJogada = gameState.maoEles.splice(indexEscolhido, 1)[0];
+        gameState.cartasJogadasEles.push(cartaJogada);
+        gameState.turnoDe = 'nos'; // Passa o turno para o jogador
+
+        if (gameState.cartasJogadasNos.length === gameState.cartasJogadasEles.length) {
+            setTimeout(avaliarRodada, 1000);
+        } else {
+            atualizarUI();
+        }
     }
     
     function decidirRespostaTrucoIA(){
@@ -553,17 +554,14 @@
         
         let chanceAceitar = 0;
         switch(gameState.iaDificuldade) {
-            case 'facil':
-                chanceAceitar = 0.9; // Quase sempre aceita
-                break;
+            case 'facil': chanceAceitar = 0.9; break;
             case 'medio':
                 if(forcaMao > 10) chanceAceitar = 0.7;
                 if(forcaMao > 100) chanceAceitar = 0.95;
                 break;
             case 'dificil':
-                if(forcaMao > 5) chanceAceitar = 0.6; // Aceita mais pra blefar
+                if(forcaMao > 5) chanceAceitar = 0.6;
                 if(forcaMao > 105) chanceAceitar = 1;
-                // Lógica pra aumentar
                 if(forcaMao > 205 && gameState.valorDaMao === 3) {
                      responderTruco('aumentar');
                      return;
@@ -581,62 +579,68 @@
 
     // --- ATUALIZAÇÃO DA INTERFACE (UI) ---
     function atualizarUI() {
-        const meuID = (gameState.gameMode === 'p2p' && !souHost) ? 'eles' : 'nos';
-        const oponenteID = meuID === 'nos' ? 'eles' : 'nos';
-
-        // Placar
-        document.getElementById('placar-nos').textContent = gameState.placarNos;
-        document.getElementById('placar-eles').textContent = gameState.placarEles;
+        // A perspectiva da UI é sempre a mesma: 'nos' é o jogador, 'eles' é o oponente.
+        const meuID = 'nos';
+        const oponenteID = 'eles';
         
-        // Rodada Info
+        // No modo P2P, se eu não sou o host, meus dados estão invertidos no gameState.
+        const placarMeu = souHost ? gameState.placarNos : gameState.placarEles;
+        const placarOponente = souHost ? gameState.placarEles : gameState.placarNos;
+        const minhaMao = souHost ? gameState.maoNos : gameState.maoEles;
+        const oponenteMao = souHost ? gameState.maoEles : gameState.maoNos;
+        
+        // Define as variáveis a serem exibidas com base no modo de jogo
+        const pNos = gameState.gameMode === 'p2p' ? placarMeu : gameState.placarNos;
+        const pEles = gameState.gameMode === 'p2p' ? placarOponente : gameState.placarEles;
+        const mNos = gameState.gameMode === 'p2p' ? minhaMao : gameState.maoNos;
+        const mEles = gameState.gameMode === 'p2p' ? oponenteMao : gameState.maoEles;
+        
+        document.getElementById('placar-nos').textContent = pNos;
+        document.getElementById('placar-eles').textContent = pEles;
+        
         let rodadaInfoTxt = `Mão valendo ${gameState.valorDaMao} ponto(s). Rodada ${gameState.rodadaAtual}.`;
-        rodadaInfoTxt += ` (Você ${gameState.placarRodada[meuID]} x ${gameState.placarRodada[oponenteID]} Oponente)`;
+        rodadaInfoTxt += ` (Você ${gameState.placarRodada.nos} x ${gameState.placarRodada.eles} Oponente)`;
         document.getElementById('rodada-info').textContent = rodadaInfoTxt;
 
-        // Vira
         document.getElementById('area-vira').innerHTML = '';
         if (gameState.vira) {
             document.getElementById('area-vira').appendChild(criarElementoCarta(gameState.vira, false));
         }
 
-        // Minha mão
         const minhaMaoEl = document.getElementById('area-jogador');
         minhaMaoEl.innerHTML = '';
-        const minhaMao = gameState[meuID];
-        minhaMao.forEach((carta, index) => {
+        mNos.forEach((carta, index) => {
             const cartaEl = criarElementoCarta(carta, true, index);
             minhaMaoEl.appendChild(cartaEl);
         });
         
-        // Mão do Oponente (cartas viradas)
         const oponenteMaoEl = document.getElementById('area-oponente');
         oponenteMaoEl.innerHTML = '';
-        const oponenteMao = gameState[oponenteID];
-        oponenteMao.forEach(() => {
+        mEles.forEach(() => {
             const cartaVirada = document.createElement('div');
             cartaVirada.classList.add('carta-virada-oponente');
             oponenteMaoEl.appendChild(cartaVirada);
         });
 
-        // Cartas na mesa
         const mesaJogadorEl = document.getElementById('mesa-jogador');
         const mesaOponenteEl = document.getElementById('mesa-oponente');
         mesaJogadorEl.innerHTML = '<div class="carta-placeholder">Você</div>';
         mesaOponenteEl.innerHTML = '<div class="carta-placeholder">Oponente</div>';
         
-        if (gameState.cartasJogadasNos[gameState.rodadaAtual-1]) {
-             const cartaNaMesa = meuID === 'nos' ? gameState.cartasJogadasNos[gameState.rodadaAtual-1] : gameState.cartasJogadasEles[gameState.rodadaAtual-1];
+        const cartaJogadorNaMesa = gameState.cartasJogadasNos[gameState.rodadaAtual-1];
+        const cartaOponenteNaMesa = gameState.cartasJogadasEles[gameState.rodadaAtual-1];
+
+        if (cartaJogadorNaMesa) {
              mesaJogadorEl.innerHTML = '';
-             mesaJogadorEl.appendChild(criarElementoCarta(cartaNaMesa, false));
+             mesaJogadorEl.appendChild(criarElementoCarta(cartaJogadorNaMesa, false));
         }
-        if (gameState.cartasJogadasEles[gameState.rodadaAtual-1]) {
-             const cartaNaMesa = meuID === 'eles' ? gameState.cartasJogadasNos[gameState.rodadaAtual-1] : gameState.cartasJogadasEles[gameState.rodadaAtual-1];
+        if (cartaOponenteNaMesa) {
              mesaOponenteEl.innerHTML = '';
-             mesaOponenteEl.appendChild(criarElementoCarta(cartaNaMesa, false));
+             mesaOponenteEl.appendChild(criarElementoCarta(cartaOponenteNaMesa, false));
         }
 
-        // Mensagens e Turno
-        if (gameState.turnoDe === meuID) {
+        const meuTurnoReal = (gameState.gameMode === 'p2p' && !souHost) ? (gameState.turnoDe === 'eles') : (gameState.turnoDe === 'nos');
+        if (meuTurnoReal) {
             if(gameState.estadoTruco === 'pendente'){
                  mensagemEl.textContent = "Oponente pediu TRUCO! E agora?";
             } else {
@@ -646,16 +650,14 @@
             mensagemEl.textContent = "Aguardando oponente...";
         }
 
-        // Botões de Ação
         const botoesAcaoEl = document.getElementById('botoes-acao');
         botoesAcaoEl.innerHTML = '';
 
-        if (gameState.estadoTruco === 'pendente' && gameState.turnoDe === meuID) {
-             // Botões de resposta ao Truco
+        if (gameState.estadoTruco === 'pendente' && meuTurnoReal) {
             botoesAcaoEl.innerHTML += `<button id="btn-aceitar-truco">Aceitar (${gameState.valorDaMao} Pts)</button>`;
             botoesAcaoEl.innerHTML += `<button id="btn-correr-truco">Correr</button>`;
             if (gameState.valorDaMao < 12) {
-                botoesAcaoEl.innerHTML += `<button id="btn-aumentar-truco">Pedir ${gameState.valorDaMao + 3}!</button>`;
+                botoesAcaoEl.innerHTML += `<button id="btn-aumentar-truco">Pedir ${gameState.valorDaMao === 9 ? 12 : gameState.valorDaMao + 3}!</button>`;
             }
             document.getElementById('btn-aceitar-truco').onclick = () => responderTruco('aceitar');
             document.getElementById('btn-correr-truco').onclick = () => responderTruco('correr');
@@ -663,12 +665,14 @@
                 document.getElementById('btn-aumentar-truco').onclick = () => responderTruco('aumentar');
             }
 
-        } else if (gameState.turnoDe === meuID) {
-            // Botão de Pedir Truco
+        } else if (meuTurnoReal) {
             if(!gameState.maoDeOnze) {
                 const btnTruco = document.createElement('button');
-                btnTruco.textContent = gameState.valorDaMao === 1 ? 'TRUCO!' : `PEDIR ${gameState.valorDaMao + 3}!`;
-                btnTruco.disabled = gameState.quemPediuTruco === meuID; // Não pode pedir truco 2x seguidas
+                const proximoValor = gameState.valorDaMao === 1 ? 3 : gameState.valorDaMao + 3;
+                btnTruco.textContent = gameState.valorDaMao === 1 ? 'TRUCO!' : `PEDIR ${proximoValor > 12 ? 12 : proximoValor}!`;
+                
+                const euPedi = souHost ? gameState.quemPediuTruco === 'nos' : gameState.quemPediuTruco === 'eles';
+                btnTruco.disabled = euPedi || gameState.valorDaMao >= 12;
                 btnTruco.onclick = pedirTruco;
                 botoesAcaoEl.appendChild(btnTruco);
             }
