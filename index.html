@@ -8,42 +8,48 @@
 </head>
 <body>
     <div id="game-board">
-        <div id="cpu-player-2" class="player">
-            <div class="card-placeholder"></div>
-            <div class="card-placeholder"></div>
-            <div class="card-placeholder"></div>
-            <p class="player-name">CPU 2</p>
+        <div class="player-area" id="top-player-area">
+            <p class="player-name">CPU 2 (Dupla)</p>
+            <div id="cpu-player-2" class="hand">
+                <div class="card back"></div>
+                <div class="card back"></div>
+                <div class="card back"></div>
+            </div>
         </div>
 
         <div id="middle-area">
-            <div id="cpu-player-1" class="player">
-                <div class="card-placeholder"></div>
-                <div class="card-placeholder"></div>
-                <div class="card-placeholder"></div>
-                <p class="player-name">CPU 1</p>
+            <div class="player-area" id="left-player-area">
+                <p class="player-name">CPU 1 (Oponente)</p>
+                <div id="cpu-player-1" class="hand">
+                    <div class="card back"></div>
+                    <div class="card back"></div>
+                    <div class="card back"></div>
+                </div>
             </div>
 
             <div id="table">
+                <div id="played-cards-container">
+                    <!-- Cartas jogadas aparecerão aqui -->
+                </div>
                 <div id="vira-container">
                     <p>Vira</p>
                     <div id="vira" class="card"></div>
                 </div>
-                <div id="played-cards">
-                    <!-- Cartas jogadas aparecerão aqui -->
-                </div>
             </div>
 
-            <div id="cpu-player-3" class="player">
-                <div class="card-placeholder"></div>
-                <div class="card-placeholder"></div>
-                <div class="card-placeholder"></div>
-                <p class="player-name">CPU 3</p>
+            <div class="player-area" id="right-player-area">
+                <p class="player-name">CPU 3 (Oponente)</p>
+                <div id="cpu-player-3" class="hand">
+                    <div class="card back"></div>
+                    <div class="card back"></div>
+                    <div class="card back"></div>
+                </div>
             </div>
         </div>
 
-        <div id="human-player" class="player">
-            <p class="player-name">Você</p>
-            <div id="player-hand">
+        <div class="player-area" id="bottom-player-area">
+             <p class="player-name">Você</p>
+            <div id="human-player" class="hand">
                 <!-- Suas cartas aparecerão aqui -->
             </div>
         </div>
@@ -51,12 +57,13 @@
 
     <div id="game-controls">
         <div id="scoreboard">
+            <h3>Placar</h3>
             <p>Nós: <span id="player-score">0</span></p>
             <p>Eles: <span id="cpu-score">0</span></p>
         </div>
         <div id="action-buttons">
-            <button id="truco-button">Truco</button>
-            <button id="run-button">Correr</button>
+            <button id="truco-button">TRUCO!</button>
+            <button id="run-button" disabled>Correr</button>
         </div>
         <div id="difficulty-selector">
             <label for="difficulty">Dificuldade:</label>
@@ -69,6 +76,7 @@
         <button id="new-game-button">Novo Jogo</button>
     </div>
 
+    <!-- O ARQUIVO SCRIPT DEVE SER CARREGADO NO FINAL -->
     <script src="script.js"></script>
 </body>
 </html>
